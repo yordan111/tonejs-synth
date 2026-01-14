@@ -128,7 +128,7 @@
             <input type="range" id="detune" min="-1200" max="1200" value="0" step="1">
         </div>
         
-        <!-- ============ ADD THESE NEW CONTROLS HERE ============ -->
+        <!-- NEW FILTER AND VOLUME CONTROLS -->
         <!-- Low Cut Filter -->
         <div class="control-group">
             <label for="lowCut">Low Cut (Hz): 
@@ -152,7 +152,7 @@
             </label>
             <input type="range" id="volume" min="-60" max="0" value="0" step="1">
         </div>
-        <!-- ============ END OF NEW CONTROLS ============ -->
+        <!-- END NEW CONTROLS -->
         
         <!-- Buttons -->
         <div class="button-group">
@@ -168,10 +168,13 @@
     <script>
         // Initialize variables
         let synth = null;
+        let lowCutFilter = null;
+        let highCutFilter = null;
+        let volumeNode = null;
         let isPlaying = false;
         let audioStarted = false;
         
-        // DOM Elements - ORIGINAL ONES
+        // DOM Elements
         const waveformSelect = document.getElementById('waveform');
         const frequencySlider = document.getElementById('frequency');
         const frequencyValue = document.getElementById('frequencyValue');
@@ -182,45 +185,57 @@
         const playBtn = document.getElementById('playBtn');
         const statusDiv = document.getElementById('status');
         
-        // ============ ADD THESE NEW DOM ELEMENTS ============
+        // NEW DOM Elements for filters and volume
         const lowCutSlider = document.getElementById('lowCut');
         const lowCutValue = document.getElementById('lowCutValue');
         const highCutSlider = document.getElementById('highCut');
         const highCutValue = document.getElementById('highCutValue');
         const volumeSlider = document.getElementById('volume');
         const volumeValue = document.getElementById('volumeValue');
-        // ============ END OF NEW DOM ELEMENTS ============
         
-        // Update display values for sliders - ORIGINAL
+        // Update display values for sliders
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
-            updateSynth();
+            if (synth && isPlaying) {
+                synth.frequency.value = parseFloat(frequencySlider.value);
+            }
         });
         
         detuneSlider.addEventListener('input', () => {
             detuneValue.textContent = detuneSlider.value;
-            updateSynth();
+            if (synth && isPlaying) {
+                synth.detune.value = parseFloat(detuneSlider.value);
+            }
         });
         
-        // ============ ADD THESE NEW EVENT LISTENERS ============
+        // NEW: Event listeners for filters and volume
         lowCutSlider.addEventListener('input', () => {
             lowCutValue.textContent = lowCutSlider.value;
-            updateSynth();
+            if (lowCutFilter) {
+                lowCutFilter.frequency.value = parseFloat(lowCutSlider.value);
+            }
         });
         
         highCutSlider.addEventListener('input', () => {
             highCutValue.textContent = highCutSlider.value;
-            updateSynth();
+            if (highCutFilter) {
+                highCutFilter.frequency.value = parseFloat(highCutSlider.value);
+            }
         });
         
         volumeSlider.addEventListener('input', () => {
             volumeValue.textContent = volumeSlider.value;
-            updateSynth();
+            if (volumeNode) {
+                volumeNode.volume.value = parseFloat(volumeSlider.value);
+            }
         });
-        // ============ END OF NEW EVENT LISTENERS ============
         
         // Waveform change handler
-        waveformSelect.addEventListener('change', updateSynth);
+        waveformSelect.addEventListener('change', () => {
+            if (synth && isPlaying) {
+                synth.type = waveformSelect.value;
+            }
+        });
         
         // Start Audio Context
         startBtn.addEventListener('click', async () => {
@@ -228,8 +243,8 @@
                 // Start Tone.js audio context
                 await Tone.start();
                 
-                // Create synthesizer with initial settings
-                createSynth();
+                // Create audio nodes
+                createAudioNodes();
                 
                 audioStarted = true;
                 statusDiv.textContent = "Audio started! Click 'Play Note' to hear sound";
@@ -250,8 +265,8 @@
         
         // Stop Audio
         stopBtn.addEventListener('click', () => {
-            if (synth) {
-                synth.triggerRelease();
+            if (synth && isPlaying) {
+                synth.stop();
                 isPlaying = false;
             }
             
@@ -263,6 +278,7 @@
             startBtn.disabled = false;
             stopBtn.disabled = true;
             playBtn.disabled = true;
+            playBtn.textContent = "Play Note";
             
             console.log("Audio stopped");
         });
@@ -275,15 +291,25 @@
             }
             
             if (!isPlaying) {
-                // Start playing the note
-                synth.triggerAttack(frequencySlider.value);
+                // Create new oscillator with current settings
+                synth = new Tone.Oscillator({
+                    frequency: parseFloat(frequencySlider.value),
+                    type: waveformSelect.value,
+                    detune: parseFloat(detuneSlider.value)
+                });
+                
+                // Connect through filter chain
+                synth.chain(lowCutFilter, highCutFilter, volumeNode, Tone.Destination);
+                
+                // Start playing
+                synth.start();
                 isPlaying = true;
                 playBtn.textContent = "Stop Note";
                 statusDiv.textContent = "Playing note...";
                 statusDiv.style.background = "#1565c0";
             } else {
-                // Stop playing the note
-                synth.triggerRelease();
+                // Stop playing
+                synth.stop();
                 isPlaying = false;
                 playBtn.textContent = "Play Note";
                 statusDiv.textContent = "Note stopped";
@@ -291,66 +317,24 @@
             }
         });
         
-        // ============ REPLACE THE createSynth() FUNCTION ============
-        // Function to create/update the synthesizer
-        function createSynth() {
-            // If synth exists, disconnect it first
-            if (synth) {
-                synth.disconnect();
-            }
-            
+        // Function to create audio nodes (filters and volume)
+        function createAudioNodes() {
             // Create filters
-            const lowCutFilter = new Tone.Filter({
+            lowCutFilter = new Tone.Filter({
                 frequency: parseFloat(lowCutSlider.value),
                 type: "highpass"
             });
             
-            const highCutFilter = new Tone.Filter({
+            highCutFilter = new Tone.Filter({
                 frequency: parseFloat(highCutSlider.value),
                 type: "lowpass"
             });
             
             // Create volume control
-            const volume = new Tone.Volume(parseFloat(volumeSlider.value));
+            volumeNode = new Tone.Volume(parseFloat(volumeSlider.value));
             
-            // Create new synth with current settings
-            synth = new Tone.Oscillator({
-                frequency: parseFloat(frequencySlider.value),
-                type: waveformSelect.value,
-                detune: parseFloat(detuneSlider.value)
-            });
-            
-            // Connect the signal chain: Synth → Low Cut → High Cut → Volume → Destination
-            synth.chain(lowCutFilter, highCutFilter, volume, Tone.Destination);
+            console.log("Audio nodes created with filters and volume");
         }
-        // ============ END OF NEW createSynth() FUNCTION ============
-        
-        // ============ REPLACE THE updateSynth() FUNCTION ============
-        // Function to update synth parameters
-        function updateSynth() {
-            if (!audioStarted) return;
-            
-            // Save current playing state and frequency
-            const wasPlaying = isPlaying;
-            const currentFreq = parseFloat(frequencySlider.value);
-            
-            // If playing, stop temporarily
-            if (wasPlaying && synth) {
-                synth.triggerRelease();
-            }
-            
-            // Recreate synth with current settings (including new filters/volume)
-            createSynth();
-            
-            // If it was playing, restart with new parameters
-            if (wasPlaying) {
-                synth.triggerAttack(currentFreq);
-            }
-        }
-        // ============ END OF NEW updateSynth() FUNCTION ============
-        
-        // Initialize synth creation
-        createSynth();
         
         // Log initialization
         console.log("Synth initialized. Waiting for user interaction...");
