@@ -1,57 +1,273 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Tone.js Synth</title>
-  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      max-width: 500px;
-      margin: auto;
-    }
-    label {
-      display: block;
-      margin-top: 15px;
-    }
-    input[type="range"], select {
-      width: 100%;
-      margin-top: 5px;
-    }
-    button {
-      margin-right: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
-      margin-top: 10px;
-    }
-  </style>
+    <title>Tone.js Synth with Controls</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .synth-container {
+            background: #2d2d2d;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #4fc3f7;
+        }
+        .control-group {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        select, input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            background: #3d3d3d;
+            border: 1px solid #555;
+            border-radius: 5px;
+            color: white;
+        }
+        .slider-value {
+            text-align: center;
+            font-size: 0.9em;
+            color: #4fc3f7;
+            margin-top: 5px;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #startBtn {
+            background: #4caf50;
+            color: white;
+        }
+        #stopBtn {
+            background: #f44336;
+            color: white;
+        }
+        #playBtn {
+            background: #2196f3;
+            color: white;
+        }
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            background: #333;
+        }
+    </style>
 </head>
 <body>
+    <div class="synth-container">
+        <h1>Tone.js Synthesizer</h1>
+        
+        <!-- Waveform Selector -->
+        <div class="control-group">
+            <label for="waveform">Waveform Type:</label>
+            <select id="waveform">
+                <option value="sine">Sine Wave</option>
+                <option value="square">Square Wave</option>
+                <option value="sawtooth">Sawtooth Wave</option>
+                <option value="triangle">Triangle Wave</option>
+            </select>
+        </div>
+        
+        <!-- Frequency Control -->
+        <div class="control-group">
+            <label for="frequency">Frequency (Hz): 
+                <span id="frequencyValue">440</span>
+            </label>
+            <input type="range" id="frequency" min="50" max="2000" value="440" step="1">
+        </div>
+        
+        <!-- Detune Control -->
+        <div class="control-group">
+            <label for="detune">Detune (cents): 
+                <span id="detuneValue">0</span>
+            </label>
+            <input type="range" id="detune" min="-1200" max="1200" value="0" step="1">
+        </div>
+        
+        <!-- Buttons -->
+        <div class="button-group">
+            <button id="startBtn">Start Audio</button>
+            <button id="stopBtn" disabled>Stop Audio</button>
+            <button id="playBtn" disabled>Play Note</button>
+        </div>
+        
+        <!-- Status Display -->
+        <div class="status" id="status">Click "Start Audio" to begin</div>
+    </div>
 
-<h1>My Tone.js Synth</h1>
-
-<!-- Buttons -->
-<button id="start">Start Audio</button>
-<button id="stop">Stop Audio</button>
-
-<!-- Frequency slider -->
-<label for="freq">Frequency (Hz)</label>
-<input type="range" id="freq" min="100" max="1000" value="440">
-
-<!-- Detune slider -->
-<label for="detune">Detune (cents)</label>
-<input type="range" id="detune" min="-100" max="100" value="0">
-
-<!-- Waveform selector -->
-<label for="wave">Waveform</label>
-<select id="wave">
-  <option value="sine">Sine</option>
-  <option value="square">Square</option>
-  <option value="triangle">Triangle</option>
-  <option value="sawtooth">Sawtooth</option>
-</select>
-
-<script src="script.js"></script>
+    <script>
+        // Initialize variables
+        let synth = null;
+        let isPlaying = false;
+        let audioStarted = false;
+        
+        // DOM Elements
+        const waveformSelect = document.getElementById('waveform');
+        const frequencySlider = document.getElementById('frequency');
+        const frequencyValue = document.getElementById('frequencyValue');
+        const detuneSlider = document.getElementById('detune');
+        const detuneValue = document.getElementById('detuneValue');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const playBtn = document.getElementById('playBtn');
+        const statusDiv = document.getElementById('status');
+        
+        // Update display values for sliders
+        frequencySlider.addEventListener('input', () => {
+            frequencyValue.textContent = frequencySlider.value;
+            updateSynth();
+        });
+        
+        detuneSlider.addEventListener('input', () => {
+            detuneValue.textContent = detuneSlider.value;
+            updateSynth();
+        });
+        
+        // Waveform change handler
+        waveformSelect.addEventListener('change', updateSynth);
+        
+        // Start Audio Context
+        startBtn.addEventListener('click', async () => {
+            try {
+                // Start Tone.js audio context
+                await Tone.start();
+                
+                // Create synthesizer with initial settings
+                createSynth();
+                
+                audioStarted = true;
+                statusDiv.textContent = "Audio started! Click 'Play Note' to hear sound";
+                statusDiv.style.background = "#2e7d32";
+                
+                // Enable/disable buttons
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                playBtn.disabled = false;
+                
+                console.log("Audio context started successfully");
+            } catch (error) {
+                statusDiv.textContent = "Error starting audio: " + error.message;
+                statusDiv.style.background = "#c62828";
+                console.error("Error starting audio:", error);
+            }
+        });
+        
+        // Stop Audio
+        stopBtn.addEventListener('click', () => {
+            if (synth) {
+                synth.triggerRelease();
+                isPlaying = false;
+            }
+            
+            audioStarted = false;
+            statusDiv.textContent = "Audio stopped. Click 'Start Audio' to begin again";
+            statusDiv.style.background = "#333";
+            
+            // Enable/disable buttons
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            playBtn.disabled = true;
+            
+            console.log("Audio stopped");
+        });
+        
+        // Play/Stop Note
+        playBtn.addEventListener('click', () => {
+            if (!audioStarted) {
+                statusDiv.textContent = "Please start audio first!";
+                return;
+            }
+            
+            if (!isPlaying) {
+                // Start playing the note
+                synth.triggerAttack(frequencySlider.value);
+                isPlaying = true;
+                playBtn.textContent = "Stop Note";
+                statusDiv.textContent = "Playing note...";
+                statusDiv.style.background = "#1565c0";
+            } else {
+                // Stop playing the note
+                synth.triggerRelease();
+                isPlaying = false;
+                playBtn.textContent = "Play Note";
+                statusDiv.textContent = "Note stopped";
+                statusDiv.style.background = "#2e7d32";
+            }
+        });
+        
+        // Function to create/update the synthesizer
+        function createSynth() {
+            // If synth exists, disconnect it first
+            if (synth) {
+                synth.disconnect();
+            }
+            
+            // Create new synth with current settings
+            synth = new Tone.Oscillator({
+                frequency: parseFloat(frequencySlider.value),
+                type: waveformSelect.value,
+                detune: parseFloat(detuneSlider.value)
+            }).toDestination();
+        }
+        
+        // Function to update synth parameters
+        function updateSynth() {
+            if (!synth || !audioStarted) return;
+            
+            // Update synth parameters
+            synth.frequency.value = parseFloat(frequencySlider.value);
+            synth.type = waveformSelect.value;
+            synth.detune.value = parseFloat(detuneSlider.value);
+            
+            // If currently playing, restart with new parameters
+            if (isPlaying) {
+                synth.triggerAttack(frequencySlider.value);
+            }
+        }
+        
+        // Initialize synth creation
+        createSynth();
+        
+        // Log initialization
+        console.log("Synth initialized. Waiting for user interaction...");
+    </script>
 </body>
 </html>
