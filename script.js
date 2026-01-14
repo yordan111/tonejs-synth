@@ -1,17 +1,21 @@
 let synth;
-let isPlaying = false; // Track if a note is currently sounding
+let isPlaying = false;
+
+// Default waveform
+let currentWave = 'sine';
 
 // Start button
 document.getElementById("start").onclick = async () => {
-  await Tone.start(); // Unlock audio in browser
+  await Tone.start();
   console.log("Audio started");
 
   if (!synth) {
-    synth = new Tone.Synth().toDestination();
+    // Create synth with current waveform
+    synth = new Tone.Synth({ oscillator: { type: currentWave } }).toDestination();
   }
 
   if (!isPlaying) {
-    synth.triggerAttack("C4"); // Start holding the note
+    synth.triggerAttack("C4");
     isPlaying = true;
   }
 };
@@ -19,7 +23,7 @@ document.getElementById("start").onclick = async () => {
 // Stop button
 document.getElementById("stop").onclick = () => {
   if (synth && isPlaying) {
-    synth.triggerRelease(); // Stop note
+    synth.triggerRelease();
     isPlaying = false;
   }
 };
@@ -40,7 +44,18 @@ document.getElementById("detune").oninput = (e) => {
 
 // Waveform selector
 document.getElementById("wave").onchange = (e) => {
+  currentWave = e.target.value;
+
   if (synth) {
-    synth.oscillator.type = e.target.value;
+    // Re-create synth with new waveform without losing frequency or detune
+    const freq = synth.oscillator.frequency.value;
+    const detune = synth.detune.value;
+
+    synth.dispose(); // remove old synth
+    synth = new Tone.Synth({ oscillator: { type: currentWave } }).toDestination();
+    synth.oscillator.frequency.value = freq;
+    synth.detune.value = detune;
+
+    if (isPlaying) synth.triggerAttack("C4"); // restart note if it was playing
   }
 };
