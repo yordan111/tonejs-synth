@@ -15,19 +15,21 @@
       display: block;
       margin-top: 15px;
     }
-    input[type="range"] {
+    input[type="range"], select {
       width: 100%;
+      margin-top: 5px;
     }
     button {
       margin-right: 10px;
       padding: 10px 20px;
       font-size: 16px;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
 
-<h1>My First Tone.js Synth</h1>
+<h1>My Tone.js Synth</h1>
 
 <!-- Buttons -->
 <button id="start">Start Audio</button>
@@ -41,15 +43,15 @@
 <label for="detune">Detune (cents)</label>
 <input type="range" id="detune" min="-100" max="100" value="0">
 
+<!-- Waveform selector -->
 <label for="wave">Waveform</label>
 <select id="wave">
   <option value="sine">Sine</option>
   <option value="square">Square</option>
   <option value="triangle">Triangle</option>
   <option value="sawtooth">Sawtooth</option>
-</select>  
-  
-<!-- JS logic -->
+</select>
+
 <script src="script.js"></script>
 </body>
 </html>
