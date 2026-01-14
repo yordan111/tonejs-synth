@@ -4,6 +4,26 @@
   <meta charset="UTF-8" />
   <title>Tone.js Synth</title>
   <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    button {
+      margin-right: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+  </style>
 </head>
 <body>
 
@@ -13,13 +33,15 @@
 <button id="start">Start Audio</button>
 <button id="stop">Stop Audio</button>
 
-<br><br>
-
 <!-- Frequency slider -->
-<label>Frequency</label>
+<label for="freq">Frequency (Hz)</label>
 <input type="range" id="freq" min="100" max="1000" value="440">
 
-<!-- Script -->
+<!-- Detune slider -->
+<label for="detune">Detune (cents)</label>
+<input type="range" id="detune" min="-100" max="100" value="0">
+
+<!-- JS logic -->
 <script src="script.js"></script>
 </body>
 </html>
