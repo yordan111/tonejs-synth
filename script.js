@@ -1,9 +1,9 @@
 let synth;
-let isPlaying = false; // Track if a note is currently sounding
+let isPlaying = false;
 
 // Start button
 document.getElementById("start").onclick = async () => {
-  await Tone.start(); // Unlocks audio in browser
+  await Tone.start();
   console.log("Audio started");
 
   if (!synth) {
@@ -11,7 +11,7 @@ document.getElementById("start").onclick = async () => {
   }
 
   if (!isPlaying) {
-    synth.triggerAttack("C4"); // Start holding the note
+    synth.triggerAttack("C4");
     isPlaying = true;
   }
 };
@@ -19,7 +19,7 @@ document.getElementById("start").onclick = async () => {
 // Stop button
 document.getElementById("stop").onclick = () => {
   if (synth && isPlaying) {
-    synth.triggerRelease(); // Stop note
+    synth.triggerRelease();
     isPlaying = false;
   }
 };
@@ -27,13 +27,20 @@ document.getElementById("stop").onclick = () => {
 // Frequency slider
 document.getElementById("freq").oninput = (e) => {
   if (synth) {
-    synth.oscillator.frequency.value = e.target.value; // Real-time pitch control
+    synth.oscillator.frequency.value = e.target.value;
   }
 };
 
 // Detune slider
 document.getElementById("detune").oninput = (e) => {
   if (synth) {
-    synth.detune.value = parseFloat(e.target.value); // Real-time detune in cents
+    synth.detune.value = parseFloat(e.target.value);
+  }
+};
+
+// Waveform selector
+document.getElementById("wave").onchange = (e) => {
+  if (synth) {
+    synth.oscillator.type = e.target.value;
   }
 };
