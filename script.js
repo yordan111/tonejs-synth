@@ -30,3 +30,10 @@ document.getElementById("freq").oninput = (e) => {
     synth.oscillator.frequency.value = e.target.value; // Real-time pitch control
   }
 };
+
+// Detune slider
+document.getElementById("detune").oninput = (e) => {
+  if (synth) {
+    synth.detune.value = parseFloat(e.target.value); // Real-time detune in cents
+  }
+};
