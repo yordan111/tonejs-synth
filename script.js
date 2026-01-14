@@ -1,9 +1,9 @@
 let synth;
-let isPlaying = false;
+let isPlaying = false; // Track if a note is currently sounding
 
 // Start button
 document.getElementById("start").onclick = async () => {
-  await Tone.start();
+  await Tone.start(); // Unlock audio in browser
   console.log("Audio started");
 
   if (!synth) {
@@ -11,7 +11,7 @@ document.getElementById("start").onclick = async () => {
   }
 
   if (!isPlaying) {
-    synth.triggerAttack("C4");
+    synth.triggerAttack("C4"); // Start holding the note
     isPlaying = true;
   }
 };
@@ -19,7 +19,7 @@ document.getElementById("start").onclick = async () => {
 // Stop button
 document.getElementById("stop").onclick = () => {
   if (synth && isPlaying) {
-    synth.triggerRelease();
+    synth.triggerRelease(); // Stop note
     isPlaying = false;
   }
 };
