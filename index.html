@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tone.js Synth with Controls</title>
+    <title>Tone.js Synth with ADSR & Unison</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         body {
@@ -95,11 +95,47 @@
             color: #ff9800;
             font-weight: normal;
         }
+        
+        /* Style for ADSR controls */
+        .adsr-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        .unison-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        /* ADSR envelope visualization */
+        .adsr-visual {
+            width: 100%;
+            height: 100px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 5px;
+            margin-top: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .adsr-path {
+            fill: none;
+            stroke: #4fc3f7;
+            stroke-width: 3;
+        }
     </style>
 </head>
 <body>
     <div class="synth-container">
-        <h1>Tone.js Synthesizer</h1>
+        <h1>Tone.js Synthesizer with ADSR & Unison</h1>
         
         <!-- Waveform Selector -->
         <div class="control-group">
@@ -128,7 +164,72 @@
             <input type="range" id="detune" min="-1200" max="1200" value="0" step="1">
         </div>
         
-        <!-- NEW FILTER AND VOLUME CONTROLS -->
+        <!-- NEW UNISON CONTROLS -->
+        <div class="unison-controls">
+            <div class="control-group">
+                <label for="unisonVoices">Unison Voices: 
+                    <span id="unisonVoicesValue">4</span>
+                </label>
+                <input type="range" id="unisonVoices" min="1" max="8" value="4" step="1">
+            </div>
+            
+            <div class="control-group">
+                <label for="unisonDetune">Unison Detune (cents): 
+                    <span id="unisonDetuneValue">10</span>
+                </label>
+                <input type="range" id="unisonDetune" min="0" max="100" value="10" step="1">
+            </div>
+            
+            <div class="control-group">
+                <label for="unisonSpread">Unison Spread: 
+                    <span id="unisonSpreadValue">0.5</span>
+                </label>
+                <input type="range" id="unisonSpread" min="0" max="1" value="0.5" step="0.01">
+            </div>
+        </div>
+        
+        <!-- NEW ADSR ENVELOPE CONTROLS -->
+        <div class="adsr-controls">
+            <div class="control-group">
+                <label for="attack">Attack (sec): 
+                    <span id="attackValue">0.1</span>
+                </label>
+                <input type="range" id="attack" min="0" max="2" value="0.1" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label for="decay">Decay (sec): 
+                    <span id="decayValue">0.2</span>
+                </label>
+                <input type="range" id="decay" min="0" max="2" value="0.2" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label for="sustain">Sustain (0-1): 
+                    <span id="sustainValue">0.7</span>
+                </label>
+                <input type="range" id="sustain" min="0" max="1" value="0.7" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label for="release">Release (sec): 
+                    <span id="releaseValue">0.5</span>
+                </label>
+                <input type="range" id="release" min="0" max="3" value="0.5" step="0.01">
+            </div>
+        </div>
+        
+        <!-- ADSR Visualization -->
+        <div class="control-group">
+            <label>ADSR Envelope:</label>
+            <div class="adsr-visual">
+                <svg width="100%" height="100%" id="adsrVisual">
+                    <!-- ADSR path will be drawn here -->
+                </svg>
+            </div>
+        </div>
+        
+        <!-- FILTER AND VOLUME CONTROLS -->
         <!-- Low Cut Filter -->
         <div class="control-group">
             <label for="lowCut">Low Cut (Hz): 
@@ -152,7 +253,6 @@
             </label>
             <input type="range" id="volume" min="-60" max="0" value="0" step="1">
         </div>
-        <!-- END NEW CONTROLS -->
         
         <!-- Buttons -->
         <div class="button-group">
@@ -173,6 +273,7 @@
         let volumeNode = null;
         let isPlaying = false;
         let audioStarted = false;
+        let oscillators = []; // Array to hold multiple oscillators for unison
         
         // DOM Elements
         const waveformSelect = document.getElementById('waveform');
@@ -184,8 +285,9 @@
         const stopBtn = document.getElementById('stopBtn');
         const playBtn = document.getElementById('playBtn');
         const statusDiv = document.getElementById('status');
+        const adsrVisual = document.getElementById('adsrVisual');
         
-        // NEW DOM Elements for filters and volume
+        // Filter and volume controls
         const lowCutSlider = document.getElementById('lowCut');
         const lowCutValue = document.getElementById('lowCutValue');
         const highCutSlider = document.getElementById('highCut');
@@ -193,22 +295,35 @@
         const volumeSlider = document.getElementById('volume');
         const volumeValue = document.getElementById('volumeValue');
         
+        // NEW ADSR Controls
+        const attackSlider = document.getElementById('attack');
+        const attackValue = document.getElementById('attackValue');
+        const decaySlider = document.getElementById('decay');
+        const decayValue = document.getElementById('decayValue');
+        const sustainSlider = document.getElementById('sustain');
+        const sustainValue = document.getElementById('sustainValue');
+        const releaseSlider = document.getElementById('release');
+        const releaseValue = document.getElementById('releaseValue');
+        
+        // NEW UNISON Controls
+        const unisonVoicesSlider = document.getElementById('unisonVoices');
+        const unisonVoicesValue = document.getElementById('unisonVoicesValue');
+        const unisonDetuneSlider = document.getElementById('unisonDetune');
+        const unisonDetuneValue = document.getElementById('unisonDetuneValue');
+        const unisonSpreadSlider = document.getElementById('unisonSpread');
+        const unisonSpreadValue = document.getElementById('unisonSpreadValue');
+        
         // Update display values for sliders
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
-            if (synth && isPlaying) {
-                synth.frequency.value = parseFloat(frequencySlider.value);
-            }
+            updateADSRVisualization();
         });
         
         detuneSlider.addEventListener('input', () => {
             detuneValue.textContent = detuneSlider.value;
-            if (synth && isPlaying) {
-                synth.detune.value = parseFloat(detuneSlider.value);
-            }
         });
         
-        // NEW: Event listeners for filters and volume
+        // Filter and volume listeners
         lowCutSlider.addEventListener('input', () => {
             lowCutValue.textContent = lowCutSlider.value;
             if (lowCutFilter) {
@@ -232,10 +347,152 @@
         
         // Waveform change handler
         waveformSelect.addEventListener('change', () => {
-            if (synth && isPlaying) {
-                synth.type = waveformSelect.value;
-            }
+            updateADSRVisualization();
         });
+        
+        // NEW: ADSR Slider Listeners
+        attackSlider.addEventListener('input', () => {
+            attackValue.textContent = attackSlider.value;
+            updateADSRVisualization();
+        });
+        
+        decaySlider.addEventListener('input', () => {
+            decayValue.textContent = decaySlider.value;
+            updateADSRVisualization();
+        });
+        
+        sustainSlider.addEventListener('input', () => {
+            sustainValue.textContent = sustainSlider.value;
+            updateADSRVisualization();
+        });
+        
+        releaseSlider.addEventListener('input', () => {
+            releaseValue.textContent = releaseSlider.value;
+            updateADSRVisualization();
+        });
+        
+        // NEW: UNISON Slider Listeners
+        unisonVoicesSlider.addEventListener('input', () => {
+            unisonVoicesValue.textContent = unisonVoicesSlider.value;
+        });
+        
+        unisonDetuneSlider.addEventListener('input', () => {
+            unisonDetuneValue.textContent = unisonDetuneSlider.value;
+        });
+        
+        unisonSpreadSlider.addEventListener('input', () => {
+            unisonSpreadValue.textContent = unisonSpreadSlider.value;
+        });
+        
+        // Function to create multiple oscillators for unison
+        function createUnisonOscillators(freq, type, detune) {
+            oscillators = [];
+            const voices = parseInt(unisonVoicesSlider.value);
+            const spread = parseFloat(unisonSpreadSlider.value);
+            const unisonDetune = parseFloat(unisonDetuneSlider.value);
+            
+            // Create master gain node for all oscillators
+            const masterGain = new Tone.Gain(1);
+            
+            for (let i = 0; i < voices; i++) {
+                // Calculate detune for this voice
+                // Spread creates voices on both sides of center frequency
+                const voicePosition = (i / (voices - 1)) * 2 - 1; // -1 to 1
+                const voiceDetune = detune + (voicePosition * unisonDetune * spread);
+                
+                // Create oscillator
+                const osc = new Tone.Oscillator({
+                    frequency: freq,
+                    type: type,
+                    detune: voiceDetune,
+                    phase: (i / voices) * 360 // Stagger phases for richer sound
+                });
+                
+                // Create individual gain for each oscillator
+                const voiceGain = new Tone.Gain(1 / Math.sqrt(voices)); // Normalize volume
+                
+                // Connect: Oscillator → Voice Gain → Master Gain
+                osc.connect(voiceGain);
+                voiceGain.connect(masterGain);
+                
+                oscillators.push({
+                    oscillator: osc,
+                    gain: voiceGain
+                });
+            }
+            
+            return masterGain;
+        }
+        
+        // Function to update ADSR visualization
+        function updateADSRVisualization() {
+            const width = adsrVisual.clientWidth;
+            const height = adsrVisual.clientHeight;
+            
+            // Clear previous visualization
+            adsrVisual.innerHTML = '';
+            
+            // Calculate time values
+            const attack = parseFloat(attackSlider.value);
+            const decay = parseFloat(decaySlider.value);
+            const sustain = parseFloat(sustainSlider.value);
+            const release = parseFloat(releaseSlider.value);
+            
+            // Total width for A+D+S
+            const totalADS = attack + decay + 0.5; // 0.5 seconds for sustain display
+            
+            // Scale factors
+            const xScale = width / (totalADS + release + 0.5); // Add some extra for release display
+            const yScale = height * 0.9; // 90% of height for the envelope
+            
+            // Create path
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            
+            // Build path points
+            let pathData = `M 0 ${height} `; // Start at bottom left
+            
+            // Attack phase
+            const attackX = attack * xScale;
+            pathData += `L ${attackX} ${height - yScale} `;
+            
+            // Decay phase
+            const decayX = attackX + (decay * xScale);
+            const sustainY = height - (sustain * yScale);
+            pathData += `L ${decayX} ${sustainY} `;
+            
+            // Sustain phase (horizontal line)
+            const sustainX = decayX + (0.5 * xScale); // 0.5 seconds of sustain display
+            pathData += `L ${sustainX} ${sustainY} `;
+            
+            // Release phase
+            const releaseX = sustainX + (release * xScale);
+            pathData += `L ${releaseX} ${height} `;
+            
+            // Close path
+            pathData += `L ${width} ${height}`;
+            
+            path.setAttribute("d", pathData);
+            path.setAttribute("class", "adsr-path");
+            
+            adsrVisual.appendChild(path);
+            
+            // Add labels
+            addLabel(adsrVisual, "A", attackX / 2, height - 10);
+            addLabel(adsrVisual, "D", attackX + (decayX - attackX) / 2, height - 10);
+            addLabel(adsrVisual, "S", decayX + (sustainX - decayX) / 2, height - 10);
+            addLabel(adsrVisual, "R", sustainX + (releaseX - sustainX) / 2, height - 10);
+        }
+        
+        function addLabel(svg, text, x, y) {
+            const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            textEl.setAttribute("x", x);
+            textEl.setAttribute("y", y);
+            textEl.setAttribute("text-anchor", "middle");
+            textEl.setAttribute("fill", "#888");
+            textEl.setAttribute("font-size", "12");
+            textEl.textContent = text;
+            svg.appendChild(textEl);
+        }
         
         // Start Audio Context
         startBtn.addEventListener('click', async () => {
@@ -245,6 +502,9 @@
                 
                 // Create audio nodes
                 createAudioNodes();
+                
+                // Initialize ADSR visualization
+                updateADSRVisualization();
                 
                 audioStarted = true;
                 statusDiv.textContent = "Audio started! Click 'Play Note' to hear sound";
@@ -265,9 +525,8 @@
         
         // Stop Audio
         stopBtn.addEventListener('click', () => {
-            if (synth && isPlaying) {
-                synth.stop();
-                isPlaying = false;
+            if (isPlaying) {
+                stopNote();
             }
             
             audioStarted = false;
@@ -284,38 +543,102 @@
         });
         
         // Play/Stop Note
-        playBtn.addEventListener('click', () => {
+        playBtn.addEventListener('click', async () => {
             if (!audioStarted) {
                 statusDiv.textContent = "Please start audio first!";
                 return;
             }
             
             if (!isPlaying) {
-                // Create new oscillator with current settings
-                synth = new Tone.Oscillator({
-                    frequency: parseFloat(frequencySlider.value),
-                    type: waveformSelect.value,
-                    detune: parseFloat(detuneSlider.value)
-                });
-                
-                // Connect through filter chain
-                synth.chain(lowCutFilter, highCutFilter, volumeNode, Tone.Destination);
-                
-                // Start playing
-                synth.start();
-                isPlaying = true;
-                playBtn.textContent = "Stop Note";
-                statusDiv.textContent = "Playing note...";
-                statusDiv.style.background = "#1565c0";
+                await playNote();
             } else {
-                // Stop playing
-                synth.stop();
-                isPlaying = false;
-                playBtn.textContent = "Play Note";
-                statusDiv.textContent = "Note stopped";
-                statusDiv.style.background = "#2e7d32";
+                stopNote();
             }
         });
+        
+        // Function to play note with unison and ADSR
+        async function playNote() {
+            try {
+                // Stop any existing sound
+                if (oscillators.length > 0) {
+                    oscillators.forEach(({ oscillator }) => oscillator.stop());
+                    oscillators = [];
+                }
+                
+                // Create ADSR envelope
+                const adsrEnvelope = new Tone.AmplitudeEnvelope({
+                    attack: parseFloat(attackSlider.value),
+                    decay: parseFloat(decaySlider.value),
+                    sustain: parseFloat(sustainSlider.value),
+                    release: parseFloat(releaseSlider.value)
+                });
+                
+                // Create unison oscillators
+                const masterGain = createUnisonOscillators(
+                    parseFloat(frequencySlider.value),
+                    waveformSelect.value,
+                    parseFloat(detuneSlider.value)
+                );
+                
+                // Connect: Unison Oscillators → ADSR Envelope → Filters → Volume → Destination
+                masterGain.connect(adsrEnvelope);
+                adsrEnvelope.chain(lowCutFilter, highCutFilter, volumeNode, Tone.Destination);
+                
+                // Start all oscillators
+                oscillators.forEach(({ oscillator }) => {
+                    oscillator.start();
+                });
+                
+                // Trigger ADSR envelope
+                adsrEnvelope.triggerAttack();
+                
+                isPlaying = true;
+                playBtn.textContent = "Stop Note";
+                statusDiv.textContent = `Playing ${oscillators.length}-voice unison...`;
+                statusDiv.style.background = "#1565c0";
+                
+                console.log(`Started ${oscillators.length}-voice unison with ADSR`);
+                
+            } catch (error) {
+                console.error("Error playing note:", error);
+                statusDiv.textContent = "Error playing note";
+                statusDiv.style.background = "#c62828";
+            }
+        }
+        
+        // Function to stop note with ADSR release
+        function stopNote() {
+            if (oscillators.length > 0 && isPlaying) {
+                // Disconnect envelope to release
+                const adsrEnvelope = volumeNode.input; // Get the envelope node
+                
+                if (adsrEnvelope && adsrEnvelope.triggerRelease) {
+                    adsrEnvelope.triggerRelease();
+                    
+                    // Schedule oscillator stop after release completes
+                    setTimeout(() => {
+                        oscillators.forEach(({ oscillator }) => {
+                            oscillator.stop();
+                        });
+                        oscillators = [];
+                        isPlaying = false;
+                        playBtn.textContent = "Play Note";
+                        statusDiv.textContent = "Note stopped";
+                        statusDiv.style.background = "#2e7d32";
+                    }, parseFloat(releaseSlider.value) * 1000 + 100);
+                } else {
+                    // Fallback: immediate stop
+                    oscillators.forEach(({ oscillator }) => {
+                        oscillator.stop();
+                    });
+                    oscillators = [];
+                    isPlaying = false;
+                    playBtn.textContent = "Play Note";
+                    statusDiv.textContent = "Note stopped";
+                    statusDiv.style.background = "#2e7d32";
+                }
+            }
+        }
         
         // Function to create audio nodes (filters and volume)
         function createAudioNodes() {
@@ -337,7 +660,7 @@
         }
         
         // Log initialization
-        console.log("Synth initialized. Waiting for user interaction...");
+        console.log("Synth with ADSR & Unison initialized");
     </script>
 </body>
 </html>
