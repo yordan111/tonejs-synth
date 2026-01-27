@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tone.js Synth with Modulator Oscillator (FM/PD)</title>
+    <title>Tone.js Synth with Waveform Visualizer & Download</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         body {
@@ -73,6 +73,10 @@
             background: #2196f3;
             color: white;
         }
+        #downloadBtn {
+            background: #9c27b0;
+            color: white;
+        }
         button:hover {
             opacity: 0.9;
             transform: translateY(-2px);
@@ -140,6 +144,55 @@
         
         #volumeValue {
             color: #4caf50;
+        }
+        
+        /* NEW: Waveform Visualizer Styles */
+        .waveform-container {
+            margin-top: 30px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .waveform-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .waveform-header h3 {
+            margin: 0;
+            color: #4fc3f7;
+        }
+        
+        .waveform-canvas-container {
+            width: 100%;
+            height: 200px;
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #waveformCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .waveform-info {
+            text-align: center;
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 10px;
+        }
+        
+        .waveform-download-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
         }
         
         /* Modulation toggle styles */
@@ -264,7 +317,7 @@
 </head>
 <body>
     <div class="synth-container">
-        <h1>Tone.js FM/PD Synthesizer</h1>
+        <h1>Tone.js Synth with Waveform Visualizer</h1>
         
         <!-- OSCILLATOR PANELS -->
         <div class="oscillator-group">
@@ -485,6 +538,23 @@
             <input type="range" id="volume" min="-60" max="0" value="0" step="1">
         </div>
         
+        <!-- NEW: WAVEFORM VISUALIZER -->
+        <div class="waveform-container">
+            <div class="waveform-header">
+                <h3>Waveform Visualizer</h3>
+                <div class="waveform-download-group">
+                    <button id="downloadBtn" disabled>Download WAV</button>
+                </div>
+            </div>
+            
+            <div class="waveform-canvas-container">
+                <canvas id="waveformCanvas"></canvas>
+            </div>
+            <div class="waveform-info" id="waveformInfo">
+                Press "Play Note" to see real-time waveform. The display will freeze when you stop.
+            </div>
+        </div>
+        
         <!-- Buttons -->
         <div class="button-group">
             <button id="startBtn">Start Audio</button>
@@ -510,7 +580,16 @@
         let oscillators = [];
         let modulatorOscillators = [];
         let activeFilterType = null;
-        let activeModulationType = 'fm'; // 'fm' or 'pd'
+        let activeModulationType = 'fm';
+        
+        // NEW: Waveform recording variables
+        let recorder = null;
+        let isRecording = false;
+        let recordedChunks = [];
+        let waveformData = [];
+        let animationId = null;
+        let isVisualizing = false;
+        let frozenWaveform = null;
         
         // DOM Elements
         const carrierWaveformSelect = document.getElementById('carrierWaveform');
@@ -520,8 +599,16 @@
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const playBtn = document.getElementById('playBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
         const statusDiv = document.getElementById('status');
         const adsrVisual = document.getElementById('adsrVisual');
+        const waveformCanvas = document.getElementById('waveformCanvas');
+        const waveformInfo = document.getElementById('waveformInfo');
+        const ctx = waveformCanvas.getContext('2d');
+        
+        // Set canvas size
+        waveformCanvas.width = waveformCanvas.offsetWidth;
+        waveformCanvas.height = waveformCanvas.offsetHeight;
         
         // Modulation Controls
         const modulatorRatioSlider = document.getElementById('modulatorRatio');
@@ -580,6 +667,227 @@
         const delayFeedbackSlider = document.getElementById('delayFeedback');
         const delayFeedbackValue = document.getElementById('delayFeedbackValue');
         
+        // Function to draw waveform
+        function drawWaveform(data, isLive = false) {
+            const width = waveformCanvas.width;
+            const height = waveformCanvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw background
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw center line
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+            
+            // Draw waveform
+            ctx.strokeStyle = isLive ? '#4fc3f7' : '#ff9800';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const sliceWidth = width / data.length;
+            let x = 0;
+            
+            for (let i = 0; i < data.length; i++) {
+                const v = data[i] / 128.0;
+                const y = (v * height) / 2;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, height / 2 + y);
+                } else {
+                    ctx.lineTo(x, height / 2 + y);
+                }
+                
+                x += sliceWidth;
+            }
+            
+            ctx.stroke();
+            
+            // Draw grid
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 0.5;
+            
+            // Vertical grid lines (every 10%)
+            for (let i = 0.1; i < 1; i += 0.1) {
+                ctx.beginPath();
+                ctx.moveTo(width * i, 0);
+                ctx.lineTo(width * i, height);
+                ctx.stroke();
+            }
+            
+            // Horizontal grid lines
+            for (let i = 0.25; i < 1; i += 0.25) {
+                ctx.beginPath();
+                ctx.moveTo(0, height * i);
+                ctx.lineTo(width, height * i);
+                ctx.stroke();
+            }
+            
+            // Update info text
+            if (isLive) {
+                waveformInfo.textContent = "Live waveform visualization (updates in real-time)";
+            } else {
+                waveformInfo.textContent = "Frozen waveform (last played note). Click 'Download WAV' to save.";
+            }
+        }
+        
+        // Function to create and visualize waveform
+        function visualizeWaveform() {
+            if (!isVisualizing) return;
+            
+            // Create an analyser node
+            const analyser = new Tone.Analyser('waveform', 1024);
+            
+            // Connect master gain to analyser
+            if (dryWetMixer) {
+                dryWetMixer.connect(analyser);
+                
+                // Get waveform data
+                const waveform = analyser.getValue();
+                
+                // Draw waveform
+                drawWaveform(waveform, true);
+                
+                // Store for freezing
+                frozenWaveform = [...waveform];
+            }
+            
+            // Continue animation
+            animationId = requestAnimationFrame(visualizeWaveform);
+        }
+        
+        // Function to start waveform visualization
+        function startVisualization() {
+            isVisualizing = true;
+            downloadBtn.disabled = true;
+            visualizeWaveform();
+        }
+        
+        // Function to stop waveform visualization and freeze
+        function stopVisualization() {
+            isVisualizing = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // Draw frozen waveform
+            if (frozenWaveform) {
+                drawWaveform(frozenWaveform, false);
+                downloadBtn.disabled = false;
+            }
+        }
+        
+        // Function to download waveform as WAV file
+        function downloadWaveform() {
+            if (!frozenWaveform || frozenWaveform.length === 0) {
+                alert("No waveform data to download. Please play a note first.");
+                return;
+            }
+            
+            try {
+                // Create audio context
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const sampleRate = audioContext.sampleRate;
+                const duration = 1.0; // 1 second of audio
+                const numSamples = Math.floor(sampleRate * duration);
+                
+                // Create buffer
+                const buffer = audioContext.createBuffer(1, numSamples, sampleRate);
+                const channelData = buffer.getChannelData(0);
+                
+                // Fill buffer with our waveform data (scaled and repeated)
+                for (let i = 0; i < numSamples; i++) {
+                    const waveformIndex = Math.floor((i / numSamples) * frozenWaveform.length);
+                    const normalizedValue = (frozenWaveform[waveformIndex] - 128) / 128;
+                    channelData[i] = normalizedValue;
+                }
+                
+                // Convert to WAV
+                const wavBlob = bufferToWav(buffer);
+                
+                // Create download link
+                const url = URL.createObjectURL(wavBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `synth_waveform_${Date.now()}.wav`;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                statusDiv.textContent = "Waveform downloaded as WAV file!";
+                statusDiv.style.background = "#2e7d32";
+                
+            } catch (error) {
+                console.error("Error downloading waveform:", error);
+                statusDiv.textContent = "Error downloading waveform";
+                statusDiv.style.background = "#c62828";
+            }
+        }
+        
+        // Helper function to convert AudioBuffer to WAV blob
+        function bufferToWav(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+            
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = buffer.length * blockAlign;
+            
+            const bufferSize = 44 + dataSize;
+            const arrayBuffer = new ArrayBuffer(bufferSize);
+            const view = new DataView(arrayBuffer);
+            
+            // Write WAV header
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+            
+            // Write audio data
+            const channelData = buffer.getChannelData(0);
+            let offset = 44;
+            
+            for (let i = 0; i < buffer.length; i++) {
+                const sample = Math.max(-1, Math.min(1, channelData[i]));
+                const intSample = sample < 0 ? sample * 32768 : sample * 32767;
+                view.setInt16(offset, intSample, true);
+                offset += 2;
+            }
+            
+            return new Blob([arrayBuffer], { type: 'audio/wav' });
+        }
+        
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+        
         // Update display values
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
@@ -592,7 +900,6 @@
         
         modulationDepthSlider.addEventListener('input', () => {
             modulationDepthValue.textContent = modulationDepthSlider.value;
-            // Update modulation depth for all active modulator gains
             if (isPlaying) {
                 modulatorOscillators.forEach(({ gain }) => {
                     gain.gain.value = parseFloat(modulationDepthSlider.value);
@@ -616,14 +923,10 @@
         // FM/PD Toggle Listeners
         fmCheckbox.addEventListener('change', () => {
             if (fmCheckbox.checked) {
-                // Uncheck PD
                 pdCheckbox.checked = false;
                 pdToggle.classList.remove('active');
-                
-                // Activate FM
                 activeModulationType = 'fm';
                 fmToggle.classList.add('active');
-                
                 statusDiv.textContent = "Frequency Modulation (FM) activated";
             } else {
                 fmToggle.classList.remove('active');
@@ -635,14 +938,10 @@
         
         pdCheckbox.addEventListener('change', () => {
             if (pdCheckbox.checked) {
-                // Uncheck FM
                 fmCheckbox.checked = false;
                 fmToggle.classList.remove('active');
-                
-                // Activate PD
                 activeModulationType = 'pd';
                 pdToggle.classList.add('active');
-                
                 statusDiv.textContent = "Phase Modulation (PD) activated";
             } else {
                 pdToggle.classList.remove('active');
@@ -651,6 +950,9 @@
                 }
             }
         });
+        
+        // Download button listener
+        downloadBtn.addEventListener('click', downloadWaveform);
         
         // ADSR Slider Listeners
         attackSlider.addEventListener('input', () => {
@@ -791,17 +1093,11 @@
             const masterGain = new Tone.Gain(1);
             
             for (let i = 0; i < voices; i++) {
-                // Calculate voice position (0 to 1)
                 const voicePosition = voices === 1 ? 0.5 : i / (voices - 1);
-                
-                // Calculate detune (-1 to 1 range)
                 const positionNormalized = (voicePosition * 2) - 1;
                 const voiceDetune = positionNormalized * unisonDetune * spread;
-                
-                // Calculate phase
                 const phase = (i / Math.max(voices, 1)) * 360;
                 
-                // Carrier oscillator (main sound)
                 const carrier = new Tone.Oscillator({
                     frequency: freq,
                     type: carrierWaveformSelect.value,
@@ -809,38 +1105,24 @@
                     phase: phase
                 });
                 
-                // Modulator oscillator (FM/PD) - NOT audible by itself
                 const modulator = new Tone.Oscillator({
                     frequency: freq * parseFloat(modulatorRatioSlider.value),
                     type: modulatorWaveformSelect.value,
-                    phase: Math.random() * 360 // Random phase for richer modulation
+                    phase: Math.random() * 360
                 });
                 
-                // Create gain nodes
                 const voiceGain = new Tone.Gain(1 / Math.sqrt(Math.max(voices, 1)));
                 const modulatorGain = new Tone.Gain(parseFloat(modulationDepthSlider.value));
                 
-                // Connect modulator to carrier based on modulation type
                 if (activeModulationType === 'fm') {
-                    // FM: Modulator affects carrier frequency
                     modulator.chain(modulatorGain, carrier.frequency);
                 } else if (activeModulationType === 'pd') {
-                    // PD: Modulator affects carrier phase (simulated via frequency)
-                    // In Tone.js, we can simulate PD by connecting to phase
-                    // or using a different modulation approach
                     modulator.chain(modulatorGain, carrier.frequency);
-                    // Note: True phase modulation would require custom implementation
-                    // This is a close approximation using FM
                 }
                 
-                // IMPORTANT: Modulator does NOT connect to masterGain or output
-                // It ONLY connects to carrier's frequency/phase
-                
-                // Connect carrier to voice gain
                 carrier.connect(voiceGain);
                 voiceGain.connect(masterGain);
                 
-                // Store oscillators
                 oscillators.push({
                     oscillator: carrier,
                     gain: voiceGain
@@ -942,7 +1224,6 @@
                 createAudioNodes();
                 updateADSRVisualization();
                 
-                // Activate FM by default
                 activeModulationType = 'fm';
                 fmToggle.classList.add('active');
                 
@@ -1029,7 +1310,10 @@
                     adsrEnvelope.connect(dryWetMixer);
                 }
                 
-                // Start all oscillators (both carriers and modulators)
+                // Start waveform visualization
+                startVisualization();
+                
+                // Start all oscillators
                 oscillators.forEach(({ oscillator }) => {
                     oscillator.start();
                 });
@@ -1078,6 +1362,9 @@
                         playBtn.textContent = "Play Note";
                         statusDiv.textContent = "Note stopped";
                         statusDiv.style.background = "#2e7d32";
+                        
+                        // Stop visualization and freeze waveform
+                        stopVisualization();
                     }, parseFloat(releaseSlider.value) * 1000 + 100);
                 } else {
                     oscillators.forEach(({ oscillator }) => {
@@ -1092,6 +1379,9 @@
                     playBtn.textContent = "Play Note";
                     statusDiv.textContent = "Note stopped";
                     statusDiv.style.background = "#2e7d32";
+                    
+                    // Stop visualization and freeze waveform
+                    stopVisualization();
                 }
             }
         }
@@ -1151,8 +1441,22 @@
             console.log("Audio nodes created with filters, effects, and volume");
         }
         
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            waveformCanvas.width = waveformCanvas.offsetWidth;
+            waveformCanvas.height = waveformCanvas.offsetHeight;
+            
+            // Redraw frozen waveform if exists
+            if (frozenWaveform && !isVisualizing) {
+                drawWaveform(frozenWaveform, false);
+            }
+        });
+        
+        // Initialize empty waveform display
+        drawWaveform(new Array(1024).fill(128), false);
+        
         // Log initialization
-        console.log("FM/PD Synthesizer initialized");
+        console.log("FM/PD Synthesizer with waveform visualizer initialized");
     </script>
 </body>
 </html>
