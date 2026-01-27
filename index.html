@@ -400,8 +400,6 @@
         const waveformSelect = document.getElementById('waveform');
         const frequencySlider = document.getElementById('frequency');
         const frequencyValue = document.getElementById('frequencyValue');
-        const detuneSlider = document.getElementById('detune');
-        const detuneValue = document.getElementById('detuneValue');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const playBtn = document.getElementById('playBtn');
@@ -461,10 +459,6 @@
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
             updateADSRVisualization();
-        });
-        
-        detuneSlider.addEventListener('input', () => {
-            detuneValue.textContent = detuneSlider.value;
         });
         
         // Volume listener
@@ -661,7 +655,7 @@
         }
         
         // Function to create multiple oscillators for unison
-        function createUnisonOscillators(freq, type, detune) {
+        function createUnisonOscillators(freq, type) {
             oscillators = [];
             const voices = parseInt(unisonVoicesSlider.value);
             const spread = parseFloat(unisonSpreadSlider.value);
@@ -676,7 +670,7 @@
                 
                 // Calculate detune (-1 to 1 range)
                 const positionNormalized = (voicePosition * 2) - 1;
-                const voiceDetune = detune + (positionNormalized * unisonDetune * spread);
+                const voiceDetune = positionNormalized * unisonDetune * spread;
                 
                 // Calculate phase
                 const phase = (i / Math.max(voices, 1)) * 360;
@@ -851,8 +845,7 @@
                 // Create unison oscillators
                 const masterGain = createUnisonOscillators(
                     parseFloat(frequencySlider.value),
-                    waveformSelect.value,
-                    parseFloat(detuneSlider.value)
+                    waveformSelect.value
                 );
                 
                 // Connect based on active filter
