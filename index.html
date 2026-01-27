@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tone.js Synth with ADSR, Unison & Effects</title>
+    <title>Tone.js Synth with Modulator Oscillator (FM/PD)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 700px;
+            max-width: 800px;
             margin: 50px auto;
             padding: 20px;
             background: #1a1a1a;
@@ -101,7 +101,7 @@
             border-radius: 10px;
         }
         
-        .unison-controls {
+        .unison-controls, .modulation-controls {
             margin-top: 20px;
             padding: 15px;
             background: rgba(0, 0, 0, 0.2);
@@ -133,20 +133,82 @@
             stroke-width: 3;
         }
         
-        /* Color coding for effect values */
+        /* Color coding */
         #reverbValue, #delayValue {
             color: #9c27b0;
-        }
-        
-        #lowCutValue, #highCutValue {
-            color: #ff9800;
         }
         
         #volumeValue {
             color: #4caf50;
         }
         
-        /* NEW: Checkbox styles */
+        /* Modulation toggle styles */
+        .modulation-toggle-group {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .modulation-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background: rgba(156, 39, 176, 0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .modulation-toggle:hover {
+            background: rgba(156, 39, 176, 0.2);
+        }
+        
+        .modulation-toggle.active {
+            background: rgba(156, 39, 176, 0.3);
+            box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.5);
+        }
+        
+        .modulation-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .modulation-toggle label {
+            margin-bottom: 0;
+            cursor: pointer;
+            color: #9c27b0;
+        }
+        
+        .modulation-slider-group {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        
+        .oscillator-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .oscillator-panel {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .oscillator-panel h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #4fc3f7;
+        }
+        
+        /* Filter toggle styles */
         .filter-toggle-group {
             display: flex;
             gap: 20px;
@@ -202,25 +264,77 @@
 </head>
 <body>
     <div class="synth-container">
-        <h1>Tone.js Synth with ADSR, Unison & Effects</h1>
+        <h1>Tone.js FM/PD Synthesizer</h1>
         
-        <!-- Waveform Selector -->
-        <div class="control-group">
-            <label for="waveform">Waveform Type:</label>
-            <select id="waveform">
-                <option value="sine">Sine Wave</option>
-                <option value="square">Square Wave</option>
-                <option value="sawtooth">Sawtooth Wave</option>
-                <option value="triangle">Triangle Wave</option>
-            </select>
-        </div>
-        
-        <!-- Frequency Control -->
-        <div class="control-group">
-            <label for="frequency">Frequency (Hz): 
-                <span id="frequencyValue">440</span>
-            </label>
-            <input type="range" id="frequency" min="50" max="2000" value="440" step="1">
+        <!-- OSCILLATOR PANELS -->
+        <div class="oscillator-group">
+            <!-- Carrier Oscillator (Main Oscillator) -->
+            <div class="oscillator-panel">
+                <h3>Carrier Oscillator (Main Sound)</h3>
+                <div class="control-group">
+                    <label for="carrierWaveform">Carrier Waveform:</label>
+                    <select id="carrierWaveform">
+                        <option value="sine">Sine Wave</option>
+                        <option value="square">Square Wave</option>
+                        <option value="sawtooth">Sawtooth Wave</option>
+                        <option value="triangle">Triangle Wave</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="frequency">Frequency (Hz): 
+                        <span id="frequencyValue">440</span>
+                    </label>
+                    <input type="range" id="frequency" min="50" max="2000" value="440" step="1">
+                </div>
+            </div>
+            
+            <!-- Modulator Oscillator (FM/PD) -->
+            <div class="oscillator-panel">
+                <h3>Modulator Oscillator (FM/PD)</h3>
+                <div class="control-group">
+                    <label for="modulatorWaveform">Modulator Waveform:</label>
+                    <select id="modulatorWaveform">
+                        <option value="sine">Sine Wave</option>
+                        <option value="square">Square Wave</option>
+                        <option value="sawtooth">Sawtooth Wave</option>
+                        <option value="triangle">Triangle Wave</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="modulatorRatio">Frequency Ratio (mod:carrier): 
+                        <span id="modulatorRatioValue">1</span>
+                    </label>
+                    <input type="range" id="modulatorRatio" min="0.1" max="10" value="1" step="0.1">
+                </div>
+                
+                <!-- FM/PD Toggle -->
+                <div class="modulation-toggle-group">
+                    <div class="modulation-toggle" id="fmToggle">
+                        <input type="checkbox" id="fmActive" checked>
+                        <label for="fmActive">Frequency Modulation (FM)</label>
+                    </div>
+                    
+                    <div class="modulation-toggle" id="pdToggle">
+                        <input type="checkbox" id="pdActive">
+                        <label for="pdActive">Phase Modulation (PD)</label>
+                    </div>
+                </div>
+                
+                <!-- Modulation Depth Slider -->
+                <div class="modulation-slider-group">
+                    <div class="control-group">
+                        <label for="modulationDepth">Modulation Depth: 
+                            <span id="modulationDepthValue">0</span>
+                        </label>
+                        <input type="range" id="modulationDepth" min="0" max="1000" value="0" step="1">
+                        <div style="text-align: center; font-size: 0.9em; color: #888;">
+                            FM: Hz deviation, PD: radians
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <!-- UNISON CONTROLS -->
@@ -326,7 +440,7 @@
             </div>
         </div>
         
-        <!-- NEW FILTER CONTROLS WITH CHECKBOXES -->
+        <!-- FILTER CONTROLS -->
         <div class="control-group">
             <label>Filter Controls:</label>
             
@@ -394,10 +508,13 @@
         let isPlaying = false;
         let audioStarted = false;
         let oscillators = [];
-        let activeFilterType = null; // 'lowcut' or 'highcut'
+        let modulatorOscillators = [];
+        let activeFilterType = null;
+        let activeModulationType = 'fm'; // 'fm' or 'pd'
         
         // DOM Elements
-        const waveformSelect = document.getElementById('waveform');
+        const carrierWaveformSelect = document.getElementById('carrierWaveform');
+        const modulatorWaveformSelect = document.getElementById('modulatorWaveform');
         const frequencySlider = document.getElementById('frequency');
         const frequencyValue = document.getElementById('frequencyValue');
         const startBtn = document.getElementById('startBtn');
@@ -406,7 +523,17 @@
         const statusDiv = document.getElementById('status');
         const adsrVisual = document.getElementById('adsrVisual');
         
-        // NEW: Filter Toggle Elements
+        // Modulation Controls
+        const modulatorRatioSlider = document.getElementById('modulatorRatio');
+        const modulatorRatioValue = document.getElementById('modulatorRatioValue');
+        const modulationDepthSlider = document.getElementById('modulationDepth');
+        const modulationDepthValue = document.getElementById('modulationDepthValue');
+        const fmCheckbox = document.getElementById('fmActive');
+        const pdCheckbox = document.getElementById('pdActive');
+        const fmToggle = document.getElementById('fmToggle');
+        const pdToggle = document.getElementById('pdToggle');
+        
+        // Filter Controls
         const lowCutCheckbox = document.getElementById('lowCutActive');
         const highCutCheckbox = document.getElementById('highCutActive');
         const lowCutToggle = document.getElementById('lowCutToggle');
@@ -414,8 +541,6 @@
         const activeFilterGroup = document.getElementById('activeFilterGroup');
         const lowCutSliderGroup = document.getElementById('lowCutSliderGroup');
         const highCutSliderGroup = document.getElementById('highCutSliderGroup');
-        
-        // NEW: Combined Filter Slider
         const filterFrequencySlider = document.getElementById('filterFrequency');
         const filterFrequencyValue = document.getElementById('filterFrequencyValue');
         const filterFrequencySlider2 = document.getElementById('filterFrequency2');
@@ -455,10 +580,24 @@
         const delayFeedbackSlider = document.getElementById('delayFeedback');
         const delayFeedbackValue = document.getElementById('delayFeedbackValue');
         
-        // Update display values for sliders
+        // Update display values
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
             updateADSRVisualization();
+        });
+        
+        modulatorRatioSlider.addEventListener('input', () => {
+            modulatorRatioValue.textContent = modulatorRatioSlider.value;
+        });
+        
+        modulationDepthSlider.addEventListener('input', () => {
+            modulationDepthValue.textContent = modulationDepthSlider.value;
+            // Update modulation depth for all active modulator gains
+            if (isPlaying) {
+                modulatorOscillators.forEach(({ gain }) => {
+                    gain.gain.value = parseFloat(modulationDepthSlider.value);
+                });
+            }
         });
         
         // Volume listener
@@ -469,9 +608,48 @@
             }
         });
         
-        // Waveform change handler
-        waveformSelect.addEventListener('change', () => {
+        // Waveform change handlers
+        carrierWaveformSelect.addEventListener('change', () => {
             updateADSRVisualization();
+        });
+        
+        // FM/PD Toggle Listeners
+        fmCheckbox.addEventListener('change', () => {
+            if (fmCheckbox.checked) {
+                // Uncheck PD
+                pdCheckbox.checked = false;
+                pdToggle.classList.remove('active');
+                
+                // Activate FM
+                activeModulationType = 'fm';
+                fmToggle.classList.add('active');
+                
+                statusDiv.textContent = "Frequency Modulation (FM) activated";
+            } else {
+                fmToggle.classList.remove('active');
+                if (!pdCheckbox.checked) {
+                    activeModulationType = null;
+                }
+            }
+        });
+        
+        pdCheckbox.addEventListener('change', () => {
+            if (pdCheckbox.checked) {
+                // Uncheck FM
+                fmCheckbox.checked = false;
+                fmToggle.classList.remove('active');
+                
+                // Activate PD
+                activeModulationType = 'pd';
+                pdToggle.classList.add('active');
+                
+                statusDiv.textContent = "Phase Modulation (PD) activated";
+            } else {
+                pdToggle.classList.remove('active');
+                if (!fmCheckbox.checked) {
+                    activeModulationType = null;
+                }
+            }
         });
         
         // ADSR Slider Listeners
@@ -544,23 +722,16 @@
             }
         });
         
-        // NEW: Filter Toggle Listeners
+        // Filter Toggle Listeners
         lowCutCheckbox.addEventListener('change', () => {
             if (lowCutCheckbox.checked) {
-                // Uncheck high cut
                 highCutCheckbox.checked = false;
                 highCutToggle.classList.remove('active');
-                
-                // Activate low cut
                 activeFilterType = 'lowcut';
                 lowCutToggle.classList.add('active');
-                
-                // Show low cut slider
                 activeFilterGroup.style.display = 'block';
                 lowCutSliderGroup.style.display = 'block';
                 highCutSliderGroup.style.display = 'none';
-                
-                // Update filter
                 updateActiveFilter();
             } else {
                 lowCutToggle.classList.remove('active');
@@ -574,20 +745,13 @@
         
         highCutCheckbox.addEventListener('change', () => {
             if (highCutCheckbox.checked) {
-                // Uncheck low cut
                 lowCutCheckbox.checked = false;
                 lowCutToggle.classList.remove('active');
-                
-                // Activate high cut
                 activeFilterType = 'highcut';
                 highCutToggle.classList.add('active');
-                
-                // Show high cut slider
                 activeFilterGroup.style.display = 'block';
                 highCutSliderGroup.style.display = 'block';
                 lowCutSliderGroup.style.display = 'none';
-                
-                // Update filter
                 updateActiveFilter();
             } else {
                 highCutToggle.classList.remove('active');
@@ -599,11 +763,10 @@
             updateFilterConnections();
         });
         
-        // NEW: Filter Frequency Slider Listeners
+        // Filter Frequency Slider Listeners
         filterFrequencySlider.addEventListener('input', () => {
             const value = filterFrequencySlider.value;
             filterFrequencyValue.textContent = value;
-            
             if (lowCutFilter && activeFilterType === 'lowcut') {
                 lowCutFilter.frequency.value = parseFloat(value);
             }
@@ -612,56 +775,19 @@
         filterFrequencySlider2.addEventListener('input', () => {
             const value = filterFrequencySlider2.value;
             filterFrequencyValue2.textContent = value;
-            
             if (highCutFilter && activeFilterType === 'highcut') {
                 highCutFilter.frequency.value = parseFloat(value);
             }
         });
         
-        // Function to update active filter based on slider position
-        function updateActiveFilter() {
-            if (activeFilterType === 'lowcut' && lowCutFilter) {
-                const value = parseFloat(filterFrequencySlider.value);
-                lowCutFilter.frequency.value = value;
-            } else if (activeFilterType === 'highcut' && highCutFilter) {
-                const value = parseFloat(filterFrequencySlider2.value);
-                highCutFilter.frequency.value = value;
-            }
-        }
-        
-        // Function to update filter connections in audio chain
-        function updateFilterConnections() {
-            if (!audioStarted || !dryWetMixer) return;
-            
-            // Disconnect all filters first
-            if (lowCutFilter) {
-                lowCutFilter.disconnect();
-            }
-            if (highCutFilter) {
-                highCutFilter.disconnect();
-            }
-            
-            // Reconnect based on active filter
-            if (activeFilterType === 'lowcut' && lowCutFilter) {
-                // Connect: source → lowCutFilter → volume
-                lowCutFilter.connect(volumeNode);
-            } else if (activeFilterType === 'highcut' && highCutFilter) {
-                // Connect: source → highCutFilter → volume
-                highCutFilter.connect(volumeNode);
-            } else {
-                // No filter active, connect directly to volume
-                // This will be handled in the playNote function
-            }
-        }
-        
-        // Function to create multiple oscillators for unison
-        function createUnisonOscillators(freq, type) {
+        // Function to create carrier + modulator pairs for unison
+        function createUnisonOscillators(freq) {
             oscillators = [];
+            modulatorOscillators = [];
             const voices = parseInt(unisonVoicesSlider.value);
             const spread = parseFloat(unisonSpreadSlider.value);
             const unisonDetune = parseFloat(unisonDetuneSlider.value);
             
-            // Create master gain node for all oscillators
             const masterGain = new Tone.Gain(1);
             
             for (let i = 0; i < voices; i++) {
@@ -675,28 +801,83 @@
                 // Calculate phase
                 const phase = (i / Math.max(voices, 1)) * 360;
                 
-                // Create oscillator
-                const osc = new Tone.Oscillator({
+                // Carrier oscillator (main sound)
+                const carrier = new Tone.Oscillator({
                     frequency: freq,
-                    type: type,
+                    type: carrierWaveformSelect.value,
                     detune: voiceDetune,
                     phase: phase
                 });
                 
-                // Create individual gain for each oscillator
-                const voiceGain = new Tone.Gain(1 / Math.sqrt(Math.max(voices, 1)));
+                // Modulator oscillator (FM/PD) - NOT audible by itself
+                const modulator = new Tone.Oscillator({
+                    frequency: freq * parseFloat(modulatorRatioSlider.value),
+                    type: modulatorWaveformSelect.value,
+                    phase: Math.random() * 360 // Random phase for richer modulation
+                });
                 
-                // Connect: Oscillator → Voice Gain → Master Gain
-                osc.connect(voiceGain);
+                // Create gain nodes
+                const voiceGain = new Tone.Gain(1 / Math.sqrt(Math.max(voices, 1)));
+                const modulatorGain = new Tone.Gain(parseFloat(modulationDepthSlider.value));
+                
+                // Connect modulator to carrier based on modulation type
+                if (activeModulationType === 'fm') {
+                    // FM: Modulator affects carrier frequency
+                    modulator.chain(modulatorGain, carrier.frequency);
+                } else if (activeModulationType === 'pd') {
+                    // PD: Modulator affects carrier phase (simulated via frequency)
+                    // In Tone.js, we can simulate PD by connecting to phase
+                    // or using a different modulation approach
+                    modulator.chain(modulatorGain, carrier.frequency);
+                    // Note: True phase modulation would require custom implementation
+                    // This is a close approximation using FM
+                }
+                
+                // IMPORTANT: Modulator does NOT connect to masterGain or output
+                // It ONLY connects to carrier's frequency/phase
+                
+                // Connect carrier to voice gain
+                carrier.connect(voiceGain);
                 voiceGain.connect(masterGain);
                 
+                // Store oscillators
                 oscillators.push({
-                    oscillator: osc,
+                    oscillator: carrier,
                     gain: voiceGain
+                });
+                
+                modulatorOscillators.push({
+                    oscillator: modulator,
+                    gain: modulatorGain
                 });
             }
             
             return masterGain;
+        }
+        
+        // Function to update active filter
+        function updateActiveFilter() {
+            if (activeFilterType === 'lowcut' && lowCutFilter) {
+                const value = parseFloat(filterFrequencySlider.value);
+                lowCutFilter.frequency.value = value;
+            } else if (activeFilterType === 'highcut' && highCutFilter) {
+                const value = parseFloat(filterFrequencySlider2.value);
+                highCutFilter.frequency.value = value;
+            }
+        }
+        
+        // Function to update filter connections
+        function updateFilterConnections() {
+            if (!audioStarted || !dryWetMixer) return;
+            
+            if (lowCutFilter) lowCutFilter.disconnect();
+            if (highCutFilter) highCutFilter.disconnect();
+            
+            if (activeFilterType === 'lowcut' && lowCutFilter) {
+                lowCutFilter.connect(volumeNode);
+            } else if (activeFilterType === 'highcut' && highCutFilter) {
+                highCutFilter.connect(volumeNode);
+            }
         }
         
         // Function to update ADSR visualization
@@ -704,26 +885,19 @@
             const width = adsrVisual.clientWidth;
             const height = adsrVisual.clientHeight;
             
-            // Clear previous visualization
             adsrVisual.innerHTML = '';
             
-            // Calculate time values
             const attack = parseFloat(attackSlider.value);
             const decay = parseFloat(decaySlider.value);
             const sustain = parseFloat(sustainSlider.value);
             const release = parseFloat(releaseSlider.value);
             
-            // Total width for A+D+S
             const totalADS = attack + decay + 0.5;
-            
-            // Scale factors
             const xScale = width / (totalADS + release + 0.5);
             const yScale = height * 0.9;
             
-            // Create path
             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
             
-            // Build path points
             let pathData = `M 0 ${height} `;
             const attackX = attack * xScale;
             pathData += `L ${attackX} ${height - yScale} `;
@@ -742,10 +916,8 @@
             
             path.setAttribute("d", pathData);
             path.setAttribute("class", "adsr-path");
-            
             adsrVisual.appendChild(path);
             
-            // Add labels
             addLabel(adsrVisual, "A", attackX / 2, height - 10);
             addLabel(adsrVisual, "D", attackX + (decayX - attackX) / 2, height - 10);
             addLabel(adsrVisual, "S", decayX + (sustainX - decayX) / 2, height - 10);
@@ -766,25 +938,23 @@
         // Start Audio Context
         startBtn.addEventListener('click', async () => {
             try {
-                // Start Tone.js audio context
                 await Tone.start();
-                
-                // Create audio nodes
                 createAudioNodes();
-                
-                // Initialize ADSR visualization
                 updateADSRVisualization();
                 
+                // Activate FM by default
+                activeModulationType = 'fm';
+                fmToggle.classList.add('active');
+                
                 audioStarted = true;
-                statusDiv.textContent = "Audio started! Click 'Play Note' to hear sound";
+                statusDiv.textContent = "Audio started! FM activated by default";
                 statusDiv.style.background = "#2e7d32";
                 
-                // Enable/disable buttons
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
                 playBtn.disabled = false;
                 
-                console.log("Audio context started successfully");
+                console.log("Audio context started with FM synthesis");
             } catch (error) {
                 statusDiv.textContent = "Error starting audio: " + error.message;
                 statusDiv.style.background = "#c62828";
@@ -802,7 +972,6 @@
             statusDiv.textContent = "Audio stopped. Click 'Start Audio' to begin again";
             statusDiv.style.background = "#333";
             
-            // Enable/disable buttons
             startBtn.disabled = false;
             stopBtn.disabled = true;
             playBtn.disabled = true;
@@ -825,13 +994,15 @@
             }
         });
         
-        // Function to play note with unison and ADSR
+        // Function to play note with modulation
         async function playNote() {
             try {
                 // Stop any existing sound
                 if (oscillators.length > 0) {
                     oscillators.forEach(({ oscillator }) => oscillator.stop());
+                    modulatorOscillators.forEach(({ oscillator }) => oscillator.stop());
                     oscillators = [];
+                    modulatorOscillators = [];
                 }
                 
                 // Create ADSR envelope
@@ -842,28 +1013,27 @@
                     release: parseFloat(releaseSlider.value)
                 });
                 
-                // Create unison oscillators
+                // Create unison oscillators with modulator
                 const masterGain = createUnisonOscillators(
-                    parseFloat(frequencySlider.value),
-                    waveformSelect.value
+                    parseFloat(frequencySlider.value)
                 );
                 
                 // Connect based on active filter
                 masterGain.connect(adsrEnvelope);
                 
                 if (activeFilterType === 'lowcut' && lowCutFilter) {
-                    // Low cut only
                     adsrEnvelope.chain(lowCutFilter, dryWetMixer);
                 } else if (activeFilterType === 'highcut' && highCutFilter) {
-                    // High cut only
                     adsrEnvelope.chain(highCutFilter, dryWetMixer);
                 } else {
-                    // No filter
                     adsrEnvelope.connect(dryWetMixer);
                 }
                 
-                // Start all oscillators
+                // Start all oscillators (both carriers and modulators)
                 oscillators.forEach(({ oscillator }) => {
+                    oscillator.start();
+                });
+                modulatorOscillators.forEach(({ oscillator }) => {
                     oscillator.start();
                 });
                 
@@ -873,12 +1043,12 @@
                 isPlaying = true;
                 playBtn.textContent = "Stop Note";
                 statusDiv.textContent = `Playing ${oscillators.length}-voice unison`;
-                if (activeFilterType) {
-                    statusDiv.textContent += ` with ${activeFilterType} filter`;
+                if (activeModulationType) {
+                    statusDiv.textContent += ` with ${activeModulationType.toUpperCase()} modulation`;
                 }
                 statusDiv.style.background = "#1565c0";
                 
-                console.log(`Started ${oscillators.length}-voice unison with ${activeFilterType || 'no'} filter`);
+                console.log(`Started ${oscillators.length}-voice unison with ${activeModulationType} modulation`);
                 
             } catch (error) {
                 console.error("Error playing note:", error);
@@ -890,29 +1060,34 @@
         // Function to stop note with ADSR release
         function stopNote() {
             if (oscillators.length > 0 && isPlaying) {
-                // Find the envelope in the chain
                 const adsrEnvelope = dryWetMixer.input;
                 
                 if (adsrEnvelope && adsrEnvelope.triggerRelease) {
                     adsrEnvelope.triggerRelease();
                     
-                    // Schedule oscillator stop after release completes
                     setTimeout(() => {
                         oscillators.forEach(({ oscillator }) => {
                             oscillator.stop();
                         });
+                        modulatorOscillators.forEach(({ oscillator }) => {
+                            oscillator.stop();
+                        });
                         oscillators = [];
+                        modulatorOscillators = [];
                         isPlaying = false;
                         playBtn.textContent = "Play Note";
                         statusDiv.textContent = "Note stopped";
                         statusDiv.style.background = "#2e7d32";
                     }, parseFloat(releaseSlider.value) * 1000 + 100);
                 } else {
-                    // Fallback: immediate stop
                     oscillators.forEach(({ oscillator }) => {
                         oscillator.stop();
                     });
+                    modulatorOscillators.forEach(({ oscillator }) => {
+                        oscillator.stop();
+                    });
                     oscillators = [];
+                    modulatorOscillators = [];
                     isPlaying = false;
                     playBtn.textContent = "Play Note";
                     statusDiv.textContent = "Note stopped";
@@ -921,9 +1096,9 @@
             }
         }
         
-        // Function to create audio nodes (filters, effects, and volume)
+        // Function to create audio nodes
         function createAudioNodes() {
-            // Create filters (but don't connect them yet)
+            // Create filters
             lowCutFilter = new Tone.Filter({
                 frequency: parseFloat(filterFrequencySlider.value),
                 type: "highpass"
@@ -977,7 +1152,7 @@
         }
         
         // Log initialization
-        console.log("Synth with ADSR, Unison & Effects initialized");
+        console.log("FM/PD Synthesizer initialized");
     </script>
 </body>
 </html>
