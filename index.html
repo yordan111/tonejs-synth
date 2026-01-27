@@ -385,45 +385,57 @@
         });
         
         // Function to create multiple oscillators for unison
-        function createUnisonOscillators(freq, type, detune) {
-            oscillators = [];
-            const voices = parseInt(unisonVoicesSlider.value);
-            const spread = parseFloat(unisonSpreadSlider.value);
-            const unisonDetune = parseFloat(unisonDetuneSlider.value);
-            
-            // Create master gain node for all oscillators
-            const masterGain = new Tone.Gain(1);
-            
-            for (let i = 0; i < voices; i++) {
-                // Calculate detune for this voice
-                // Spread creates voices on both sides of center frequency
-                const voicePosition = (i / (voices - 1)) * 2 - 1; // -1 to 1
-                const voiceDetune = detune + (voicePosition * unisonDetune * spread);
-                
-                // Create oscillator
-                const osc = new Tone.Oscillator({
-                    frequency: freq,
-                    type: type,
-                    detune: voiceDetune,
-                    phase: (i / voices) * 360 // Stagger phases for richer sound
-                });
-                
-                // Create individual gain for each oscillator
-                const voiceGain = new Tone.Gain(1 / Math.sqrt(voices)); // Normalize volume
-                
-                // Connect: Oscillator → Voice Gain → Master Gain
-                osc.connect(voiceGain);
-                voiceGain.connect(masterGain);
-                
-                oscillators.push({
-                    oscillator: osc,
-                    gain: voiceGain
-                });
-            }
-            
-            return masterGain;
+// Replace the createUnisonOscillators function with this corrected version:
+function createUnisonOscillators(freq, type, detune) {
+    oscillators = [];
+    const voices = parseInt(unisonVoicesSlider.value);
+    const spread = parseFloat(unisonSpreadSlider.value);
+    const unisonDetune = parseFloat(unisonDetuneSlider.value);
+    
+    // Create master gain node for all oscillators
+    const masterGain = new Tone.Gain(1);
+    
+    for (let i = 0; i < voices; i++) {
+        // Calculate detune for this voice
+        let voiceDetune = detune;
+        
+        // Only calculate spread if we have more than 1 voice
+        if (voices > 1) {
+            // Spread creates voices on both sides of center frequency
+            const voicePosition = (i / (voices - 1)) * 2 - 1; // -1 to 1
+            voiceDetune = detune + (voicePosition * unisonDetune * spread);
         }
         
+        // Calculate phase (stagger phases for richer sound)
+        let phase = 0;
+        if (voices > 1) {
+            phase = (i / voices) * 360;
+        }
+        
+        // Create oscillator
+        const osc = new Tone.Oscillator({
+            frequency: freq,
+            type: type,
+            detune: voiceDetune,
+            phase: phase
+        });
+        
+        // Create individual gain for each oscillator
+        // Normalize volume based on number of voices
+        const voiceGain = new Tone.Gain(1 / Math.sqrt(voices));
+        
+        // Connect: Oscillator → Voice Gain → Master Gain
+        osc.connect(voiceGain);
+        voiceGain.connect(masterGain);
+        
+        oscillators.push({
+            oscillator: osc,
+            gain: voiceGain
+        });
+    }
+    
+    return masterGain;
+}
         // Function to update ADSR visualization
         function updateADSRVisualization() {
             const width = adsrVisual.clientWidth;
