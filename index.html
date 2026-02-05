@@ -326,6 +326,21 @@
             color: #888;
             margin-top: 10px;
         }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -339,6 +354,7 @@
                 <button id="startBtn">Start Audio</button>
                 <button id="stopBtn" disabled>Stop Audio</button>
                 <button id="playBtn" disabled>Play Note</button>
+                <button id="downloadBtn" disabled>Download WAV</button>
             </div>
             
             <!-- Waveform Visualizer -->
@@ -346,15 +362,14 @@
                 <div class="waveform-header">
                     <h3>Waveform Visualizer</h3>
                     <div class="waveform-download-group">
-                        <button id="downloadBtn" disabled>Download WAV</button>
+                        <span class="waveform-info" id="waveformInfo">
+                            Press "Play Note" to see real-time waveform
+                        </span>
                     </div>
                 </div>
                 
                 <div class="waveform-canvas-container">
                     <canvas id="waveformCanvas"></canvas>
-                </div>
-                <div class="waveform-info" id="waveformInfo">
-                    Press "Play Note" to see real-time waveform. The display will freeze when you stop.
                 </div>
             </div>
         </div>
@@ -607,6 +622,9 @@
         let frozenWaveform = null;
         let audioBufferForDownload = null;
         
+        // NEW: Audio recording variables
+        let recordedBuffer = null;
+        
         // DOM Elements
         const carrierWaveformSelect = document.getElementById('carrierWaveform');
         const modulatorWaveformSelect = document.getElementById('modulatorWaveform');
@@ -702,17 +720,15 @@
                     mod.gain.connect(oscillators[index].oscillator.frequency);
                 } else if (newType === 'pd') {
                     // PD: modulator → gain → carrier frequency (simulated PD)
-                    // Note: True phase modulation would require different approach
                     mod.oscillator.connect(mod.gain);
                     mod.gain.connect(oscillators[index].oscillator.frequency);
                     
-                    // For PD simulation, we can adjust the modulation curve
-                    // by changing the modulation depth scaling
+                    // For PD simulation, adjust the modulation depth scaling
                     mod.gain.gain.value = parseFloat(modulationDepthSlider.value) * 0.1;
                 }
                 
-                // Ensure modulator is still connected to output (through its own gain)
-                mod.oscillator.start(); // Keep it running
+                // Ensure modulator is still running
+                mod.oscillator.start();
             });
             
             console.log(`Switched to ${newType.toUpperCase()} modulation`);
@@ -738,7 +754,7 @@
                 
                 // Update modulation depth with different scaling for PD
                 if (activeModulationType === 'pd') {
-                    // PD typically uses smaller depth values for similar effect
+                    // PD typically uses smaller depth values
                     mod.gain.gain.value = depth * 0.1;
                 } else {
                     mod.gain.gain.value = depth;
@@ -813,7 +829,7 @@
                 waveformInfo.textContent = "Live waveform visualization";
                 waveformInfo.style.color = "#4fc3f7";
             } else if (data && data.length > 0) {
-                waveformInfo.textContent = "Frozen waveform. Click 'Download WAV' to save.";
+                waveformInfo.textContent = "Frozen waveform. Ready to download.";
                 waveformInfo.style.color = "#ff9800";
             } else {
                 waveformInfo.textContent = "Press 'Play Note' to see waveform";
@@ -856,7 +872,6 @@
             }
             
             isVisualizing = true;
-            downloadBtn.disabled = true;
             visualizeWaveform();
         }
         
@@ -871,83 +886,237 @@
             // Draw frozen waveform if we have data
             if (frozenWaveform && frozenWaveform.length > 0) {
                 drawWaveform(frozenWaveform, false);
-                downloadBtn.disabled = false;
-                
-                // Create audio buffer for download
-                createDownloadBuffer();
             } else {
                 drawWaveform([], false);
-                downloadBtn.disabled = true;
             }
         }
         
-        // Function to create audio buffer for download
-        function createDownloadBuffer() {
-            if (!frozenWaveform || frozenWaveform.length === 0) return;
-            
+        // NEW: Function to record the current patch using Tone.Offline
+        async function recordCurrentPatch() {
             try {
-                const audioContext = Tone.getContext().rawContext;
-                const sampleRate = audioContext.sampleRate;
-                const duration = 1.0;
-                const numSamples = Math.floor(sampleRate * duration);
+                statusDiv.innerHTML = "Rendering audio with your patch settings... <span class='loading'></span>";
+                statusDiv.style.background = "#ff9800";
                 
-                audioBufferForDownload = audioContext.createBuffer(1, numSamples, sampleRate);
-                const channelData = audioBufferForDownload.getChannelData(0);
+                // Calculate duration based on ADSR
+                const attack = parseFloat(attackSlider.value);
+                const decay = parseFloat(decaySlider.value);
+                const release = parseFloat(releaseSlider.value);
+                const duration = Math.max(2, attack + decay + release + 0.5); // Minimum 2 seconds
                 
-                // Get current frequency
-                const freq = parseFloat(frequencySlider.value);
-                const cycleLength = Math.floor(sampleRate / freq);
+                // Get all current settings
+                const currentSettings = {
+                    frequency: parseFloat(frequencySlider.value),
+                    carrierWaveform: carrierWaveformSelect.value,
+                    modulatorWaveform: modulatorWaveformSelect.value,
+                    modulatorRatio: parseFloat(modulatorRatioSlider.value),
+                    modulationDepth: parseFloat(modulationDepthSlider.value),
+                    modulationType: activeModulationType,
+                    unisonVoices: parseInt(unisonVoicesSlider.value),
+                    unisonDetune: parseFloat(unisonDetuneSlider.value),
+                    unisonSpread: parseFloat(unisonSpreadSlider.value),
+                    attack: attack,
+                    decay: decay,
+                    sustain: parseFloat(sustainSlider.value),
+                    release: release,
+                    filterType: activeFilterType,
+                    filterFreq: activeFilterType === 'lowcut' ? parseFloat(filterFrequencySlider.value) : 
+                                 activeFilterType === 'highcut' ? parseFloat(filterFrequencySlider2.value) : null,
+                    reverbMix: parseFloat(reverbSlider.value),
+                    reverbSize: parseFloat(reverbSizeSlider.value),
+                    delayMix: parseFloat(delaySlider.value),
+                    delayTime: parseFloat(delayTimeSlider.value),
+                    delayFeedback: parseFloat(delayFeedbackSlider.value),
+                    volume: parseFloat(volumeSlider.value)
+                };
                 
-                // Fill buffer with waveform data
-                for (let i = 0; i < numSamples; i++) {
-                    const waveformIndex = Math.floor((i % cycleLength) / cycleLength * frozenWaveform.length);
-                    const dataIndex = Math.min(waveformIndex, frozenWaveform.length - 1);
-                    channelData[i] = frozenWaveform[dataIndex];
+                console.log("Recording patch with settings:", currentSettings);
+                
+                // Render offline with Tone.Offline
+                const renderedBuffer = await Tone.Offline(async ({ transport }) => {
+                    // Create a fresh synth setup with current settings
+                    const offlineSynth = await createOfflineUnisonOscillators(
+                        currentSettings.frequency,
+                        currentSettings.carrierWaveform,
+                        currentSettings.unisonVoices,
+                        currentSettings.unisonDetune,
+                        currentSettings.unisonSpread
+                    );
+                    
+                    // Create modulator
+                    const modulator = new Tone.Oscillator({
+                        frequency: currentSettings.frequency * currentSettings.modulatorRatio,
+                        type: currentSettings.modulatorWaveform
+                    });
+                    
+                    const modulatorGain = new Tone.Gain(
+                        currentSettings.modulationType === 'pd' ? 
+                        currentSettings.modulationDepth * 0.1 : 
+                        currentSettings.modulationDepth
+                    );
+                    
+                    // Connect modulation
+                    modulator.chain(modulatorGain, offlineSynth.oscillator.frequency);
+                    
+                    // Create ADSR envelope
+                    const offlineADSR = new Tone.AmplitudeEnvelope({
+                        attack: currentSettings.attack,
+                        decay: currentSettings.decay,
+                        sustain: currentSettings.sustain,
+                        release: currentSettings.release
+                    });
+                    
+                    offlineSynth.oscillator.connect(offlineADSR);
+                    modulator.start();
+                    
+                    // Apply filter if active
+                    if (currentSettings.filterType === 'lowcut') {
+                        const filter = new Tone.Filter({
+                            frequency: currentSettings.filterFreq,
+                            type: "highpass"
+                        });
+                        offlineADSR.connect(filter);
+                        filter.connect(Tone.Destination);
+                    } else if (currentSettings.filterType === 'highcut') {
+                        const filter = new Tone.Filter({
+                            frequency: currentSettings.filterFreq,
+                            type: "lowpass"
+                        });
+                        offlineADSR.connect(filter);
+                        filter.connect(Tone.Destination);
+                    } else {
+                        offlineADSR.connect(Tone.Destination);
+                    }
+                    
+                    // Add effects
+                    const reverb = new Tone.Reverb({
+                        decay: currentSettings.reverbSize * 10,
+                        wet: currentSettings.reverbMix
+                    }).toDestination();
+                    
+                    const delay = new Tone.FeedbackDelay({
+                        delayTime: currentSettings.delayTime,
+                        feedback: currentSettings.delayFeedback,
+                        wet: currentSettings.delayMix
+                    }).toDestination();
+                    
+                    // Connect effects
+                    if (currentSettings.filterType === 'lowcut' || currentSettings.filterType === 'highcut') {
+                        // Connect through filter first
+                        const filterElement = document.querySelector('.filter-toggle.active') ? 
+                            (currentSettings.filterType === 'lowcut' ? 
+                                new Tone.Filter({ frequency: currentSettings.filterFreq, type: "highpass" }) :
+                                new Tone.Filter({ frequency: currentSettings.filterFreq, type: "lowpass" })) : null;
+                        
+                        if (filterElement) {
+                            offlineADSR.connect(filterElement);
+                            filterElement.connect(reverb);
+                            filterElement.connect(delay);
+                            filterElement.connect(Tone.Destination);
+                        } else {
+                            offlineADSR.connect(reverb);
+                            offlineADSR.connect(delay);
+                            offlineADSR.connect(Tone.Destination);
+                        }
+                    } else {
+                        offlineADSR.connect(reverb);
+                        offlineADSR.connect(delay);
+                        offlineADSR.connect(Tone.Destination);
+                    }
+                    
+                    // Set volume
+                    const volume = new Tone.Volume(currentSettings.volume).toDestination();
+                    offlineADSR.connect(volume);
+                    
+                    // Trigger the note
+                    offlineSynth.oscillator.start();
+                    offlineADSR.triggerAttackRelease(duration - 0.1);
+                    
+                }, duration, 1, 44100);
+                
+                // Store the rendered buffer
+                recordedBuffer = renderedBuffer.get();
+                
+                // Create waveform visualization from the recorded buffer
+                if (recordedBuffer) {
+                    const channelData = recordedBuffer.getChannelData(0);
+                    const sampleCount = channelData.length;
+                    const downsampleFactor = Math.ceil(sampleCount / 512);
+                    const downsampledData = [];
+                    
+                    for (let i = 0; i < sampleCount; i += downsampleFactor) {
+                        downsampledData.push(channelData[i]);
+                    }
+                    
+                    frozenWaveform = downsampledData.slice(0, 512);
+                    drawWaveform(frozenWaveform, false);
                 }
                 
-                console.log("Audio buffer created for download");
-            } catch (error) {
-                console.error("Error creating download buffer:", error);
-                audioBufferForDownload = null;
-            }
-        }
-        
-        // Function to download waveform as WAV file
-        function downloadWaveform() {
-            if (!audioBufferForDownload) {
-                alert("No audio data available for download. Please play a note first.");
-                return;
-            }
-            
-            try {
-                // Convert buffer to WAV
-                const wavBlob = bufferToWav(audioBufferForDownload);
+                // Enable download button
+                downloadBtn.disabled = false;
                 
-                // Create download link
-                const url = URL.createObjectURL(wavBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `synth_waveform_${Date.now()}.wav`;
-                document.body.appendChild(a);
-                a.click();
-                
-                // Cleanup
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-                
-                statusDiv.textContent = "Waveform downloaded as WAV file!";
+                statusDiv.innerHTML = "Audio rendered successfully! Click 'Download WAV' to save your patch.";
                 statusDiv.style.background = "#2e7d32";
                 
+                return true;
+                
             } catch (error) {
-                console.error("Error downloading waveform:", error);
-                statusDiv.textContent = "Error downloading waveform";
+                console.error("Error recording patch:", error);
+                statusDiv.innerHTML = "Error rendering audio. Please try again.";
                 statusDiv.style.background = "#c62828";
+                return false;
             }
         }
         
-        // Helper function to convert AudioBuffer to WAV blob
+        // Helper function to create offline unison oscillators
+        async function createOfflineUnisonOscillators(freq, waveform, voices, detune, spread) {
+            const masterGain = new Tone.Gain(1);
+            
+            if (voices === 1) {
+                // Single oscillator
+                const oscillator = new Tone.Oscillator({
+                    frequency: freq,
+                    type: waveform
+                });
+                oscillator.connect(masterGain);
+                
+                return {
+                    oscillator: oscillator,
+                    gain: masterGain
+                };
+            } else {
+                // Multiple oscillators for unison
+                const oscillators = [];
+                
+                for (let i = 0; i < voices; i++) {
+                    const voicePosition = i / (voices - 1);
+                    const positionNormalized = (voicePosition * 2) - 1;
+                    const voiceDetune = positionNormalized * detune * spread;
+                    const phase = (i / Math.max(voices, 1)) * 360;
+                    
+                    const oscillator = new Tone.Oscillator({
+                        frequency: freq,
+                        type: waveform,
+                        detune: voiceDetune,
+                        phase: phase
+                    });
+                    
+                    const voiceGain = new Tone.Gain(1 / Math.sqrt(Math.max(voices, 1)));
+                    oscillator.connect(voiceGain);
+                    voiceGain.connect(masterGain);
+                    
+                    oscillators.push(oscillator);
+                }
+                
+                // Return the first oscillator as primary (for modulation)
+                return {
+                    oscillator: oscillators[0],
+                    gain: masterGain,
+                    allOscillators: oscillators
+                };
+            }
+        }
+        
+        // Function to convert buffer to WAV
         function bufferToWav(buffer) {
             const numChannels = buffer.numberOfChannels;
             const sampleRate = buffer.sampleRate;
@@ -958,8 +1127,8 @@
             const blockAlign = numChannels * bytesPerSample;
             const byteRate = sampleRate * blockAlign;
             const dataSize = buffer.length * blockAlign;
-            
             const bufferSize = 44 + dataSize;
+            
             const arrayBuffer = new ArrayBuffer(bufferSize);
             const view = new DataView(arrayBuffer);
             
@@ -983,7 +1152,7 @@
             let offset = 44;
             
             for (let i = 0; i < buffer.length; i++) {
-                const sample = Math.max(-1, Math.min(1, channelData[i]));
+                let sample = Math.max(-1, Math.min(1, channelData[i]));
                 const intSample = sample < 0 ? sample * 32768 : sample * 32767;
                 view.setInt16(offset, intSample, true);
                 offset += 2;
@@ -998,42 +1167,74 @@
             }
         }
         
+        // Download function
+        async function downloadWaveform() {
+            if (!recordedBuffer) {
+                // If no buffer exists, record it first
+                const success = await recordCurrentPatch();
+                if (!success) return;
+            }
+            
+            try {
+                const wavBlob = bufferToWav(recordedBuffer);
+                
+                // Generate descriptive filename
+                const carrier = carrierWaveformSelect.value;
+                const modulator = modulatorWaveformSelect.value;
+                const modType = activeModulationType.toUpperCase();
+                const freq = frequencySlider.value;
+                
+                const filename = `FM_PD_Synth_${carrier}_${modulator}_${modType}_${freq}Hz_${Date.now()}.wav`;
+                
+                // Create download link
+                const url = URL.createObjectURL(wavBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                statusDiv.innerHTML = `Downloaded: ${filename}`;
+                statusDiv.style.background = "#2e7d32";
+                
+            } catch (error) {
+                console.error("Error downloading:", error);
+                statusDiv.innerHTML = "Error downloading file";
+                statusDiv.style.background = "#c62828";
+            }
+        }
+        
         // Update display values with real-time updates
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
             updateADSRVisualization();
-            
-            // Update carrier frequency in real-time
             updateCarrierParameters();
-            
-            // Update modulator frequency in real-time (based on ratio)
             updateModulatorParameters();
         });
         
         modulatorRatioSlider.addEventListener('input', () => {
             modulatorRatioValue.textContent = modulatorRatioSlider.value;
-            
-            // Update modulator frequency in real-time
             updateModulatorParameters();
         });
         
         modulationDepthSlider.addEventListener('input', () => {
             modulationDepthValue.textContent = modulationDepthSlider.value;
-            
-            // Update modulation depth in real-time
             updateModulatorParameters();
         });
         
         // Waveform change handlers with real-time updates
         carrierWaveformSelect.addEventListener('change', () => {
             updateADSRVisualization();
-            
-            // Update carrier waveform in real-time
             updateCarrierParameters();
         });
         
         modulatorWaveformSelect.addEventListener('change', () => {
-            // Update modulator waveform in real-time
             updateModulatorParameters();
         });
         
@@ -1045,18 +1246,13 @@
             }
         });
         
-        // FM/PD Toggle Listeners with proper switching
+        // FM/PD Toggle Listeners
         fmCheckbox.addEventListener('change', () => {
             if (fmCheckbox.checked) {
-                // Uncheck PD
                 pdCheckbox.checked = false;
                 pdToggle.classList.remove('active');
-                
-                // Activate FM
                 activeModulationType = 'fm';
                 fmToggle.classList.add('active');
-                
-                // Switch modulation type in real-time
                 switchModulationType('fm');
             } else {
                 fmToggle.classList.remove('active');
@@ -1068,15 +1264,10 @@
         
         pdCheckbox.addEventListener('change', () => {
             if (pdCheckbox.checked) {
-                // Uncheck FM
                 fmCheckbox.checked = false;
                 fmToggle.classList.remove('active');
-                
-                // Activate PD
                 activeModulationType = 'pd';
                 pdToggle.classList.add('active');
-                
-                // Switch modulation type in real-time
                 switchModulationType('pd');
             } else {
                 pdToggle.classList.remove('active');
@@ -1093,8 +1284,6 @@
         attackSlider.addEventListener('input', () => {
             attackValue.textContent = attackSlider.value;
             updateADSRVisualization();
-            
-            // Update ADSR envelope in real-time if playing
             if (isPlaying && adsrEnvelope) {
                 adsrEnvelope.attack = parseFloat(attackSlider.value);
             }
@@ -1103,7 +1292,6 @@
         decaySlider.addEventListener('input', () => {
             decayValue.textContent = decaySlider.value;
             updateADSRVisualization();
-            
             if (isPlaying && adsrEnvelope) {
                 adsrEnvelope.decay = parseFloat(decaySlider.value);
             }
@@ -1112,7 +1300,6 @@
         sustainSlider.addEventListener('input', () => {
             sustainValue.textContent = sustainSlider.value;
             updateADSRVisualization();
-            
             if (isPlaying && adsrEnvelope) {
                 adsrEnvelope.sustain = parseFloat(sustainSlider.value);
             }
@@ -1121,7 +1308,6 @@
         releaseSlider.addEventListener('input', () => {
             releaseValue.textContent = releaseSlider.value;
             updateADSRVisualization();
-            
             if (isPlaying && adsrEnvelope) {
                 adsrEnvelope.release = parseFloat(releaseSlider.value);
             }
@@ -1140,7 +1326,7 @@
             unisonSpreadValue.textContent = unisonSpreadSlider.value;
         });
         
-        // EFFECTS Slider Listeners with real-time updates
+        // EFFECTS Slider Listeners
         reverbSlider.addEventListener('input', () => {
             reverbValue.textContent = reverbSlider.value;
             if (reverbNode) {
@@ -1217,7 +1403,7 @@
             updateFilterConnections();
         });
         
-        // Filter Frequency Slider Listeners with real-time updates
+        // Filter Frequency Slider Listeners
         filterFrequencySlider.addEventListener('input', () => {
             const value = filterFrequencySlider.value;
             filterFrequencyValue.textContent = value;
@@ -1271,7 +1457,6 @@
                     modulator.chain(modulatorGain, carrier.frequency);
                 } else if (activeModulationType === 'pd') {
                     modulator.chain(modulatorGain, carrier.frequency);
-                    // Adjust gain for PD
                     modulatorGain.gain.value = parseFloat(modulationDepthSlider.value) * 0.1;
                 }
                 
@@ -1390,8 +1575,9 @@
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
                 playBtn.disabled = false;
+                downloadBtn.disabled = false;
                 
-                console.log("Audio context started with FM synthesis");
+                console.log("Audio context started");
             } catch (error) {
                 statusDiv.textContent = "Error starting audio: " + error.message;
                 statusDiv.style.background = "#c62828";
@@ -1413,6 +1599,7 @@
             stopBtn.disabled = true;
             playBtn.disabled = true;
             playBtn.textContent = "Play Note";
+            downloadBtn.disabled = true;
             
             console.log("Audio stopped");
         });
@@ -1616,13 +1803,16 @@
             if (frozenWaveform && !isVisualizing) {
                 drawWaveform(frozenWaveform, false);
             }
+            
+            // Update ADSR visualization
+            updateADSRVisualization();
         });
         
         // Initialize empty waveform display
         drawWaveform([], false);
         
         // Log initialization
-        console.log("FM/PD Synthesizer with real-time switching initialized");
+        console.log("FM/PD Synthesizer with working download initialized");
     </script>
 </body>
 </html>
