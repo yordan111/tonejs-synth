@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tone.js Synth with Working Waveform Visualizer</title>
+    <title>Tone.js Synth with Real-time Updates</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         body {
@@ -330,7 +330,7 @@
 </head>
 <body>
     <div class="synth-container">
-        <h1>Tone.js Synth with Waveform Visualizer</h1>
+        <h1>Tone.js Synth with Real-time Modulation</h1>
         
         <!-- MOVED TO TOP: Audio Controls and Waveform Visualizer -->
         <div class="top-controls">
@@ -598,6 +598,8 @@
         let modulatorOscillators = [];
         let activeFilterType = null;
         let activeModulationType = 'fm';
+        let masterGain = null;
+        let adsrEnvelope = null;
         
         // Waveform visualization variables
         let animationId = null;
@@ -680,6 +682,45 @@
         const delayTimeValue = document.getElementById('delayTimeValue');
         const delayFeedbackSlider = document.getElementById('delayFeedback');
         const delayFeedbackValue = document.getElementById('delayFeedbackValue');
+        
+        // Function to update modulator parameters in real-time
+        function updateModulatorParameters() {
+            if (!isPlaying || modulatorOscillators.length === 0) return;
+            
+            const freq = parseFloat(frequencySlider.value);
+            const ratio = parseFloat(modulatorRatioSlider.value);
+            const depth = parseFloat(modulationDepthSlider.value);
+            const waveform = modulatorWaveformSelect.value;
+            
+            // Update each modulator oscillator
+            modulatorOscillators.forEach((mod, index) => {
+                // Update frequency based on current carrier frequency and ratio
+                mod.oscillator.frequency.value = freq * ratio;
+                
+                // Update waveform type
+                mod.oscillator.type = waveform;
+                
+                // Update modulation depth
+                mod.gain.gain.value = depth;
+            });
+        }
+        
+        // Function to update carrier parameters in real-time
+        function updateCarrierParameters() {
+            if (!isPlaying || oscillators.length === 0) return;
+            
+            const freq = parseFloat(frequencySlider.value);
+            const waveform = carrierWaveformSelect.value;
+            
+            // Update each carrier oscillator
+            oscillators.forEach((osc, index) => {
+                // Update frequency
+                osc.oscillator.frequency.value = freq;
+                
+                // Update waveform type
+                osc.oscillator.type = waveform;
+            });
+        }
         
         // Function to draw waveform
         function drawWaveform(data, isLive = false) {
@@ -916,23 +957,47 @@
             }
         }
         
-        // Update display values
+        // Update display values with real-time updates
         frequencySlider.addEventListener('input', () => {
             frequencyValue.textContent = frequencySlider.value;
             updateADSRVisualization();
+            
+            // Update carrier frequency in real-time
+            updateCarrierParameters();
+            
+            // Update modulator frequency in real-time (based on ratio)
+            updateModulatorParameters();
         });
         
         modulatorRatioSlider.addEventListener('input', () => {
             modulatorRatioValue.textContent = modulatorRatioSlider.value;
+            
+            // Update modulator frequency in real-time
+            updateModulatorParameters();
         });
         
         modulationDepthSlider.addEventListener('input', () => {
             modulationDepthValue.textContent = modulationDepthSlider.value;
+            
+            // Update modulation depth in real-time
             if (isPlaying) {
                 modulatorOscillators.forEach(({ gain }) => {
                     gain.gain.value = parseFloat(modulationDepthSlider.value);
                 });
             }
+        });
+        
+        // Waveform change handlers with real-time updates
+        carrierWaveformSelect.addEventListener('change', () => {
+            updateADSRVisualization();
+            
+            // Update carrier waveform in real-time
+            updateCarrierParameters();
+        });
+        
+        modulatorWaveformSelect.addEventListener('change', () => {
+            // Update modulator waveform in real-time
+            updateModulatorParameters();
         });
         
         // Volume listener
@@ -943,12 +1008,7 @@
             }
         });
         
-        // Waveform change handlers
-        carrierWaveformSelect.addEventListener('change', () => {
-            updateADSRVisualization();
-        });
-        
-        // FM/PD Toggle Listeners
+        // FM/PD Toggle Listeners with real-time updates
         fmCheckbox.addEventListener('change', () => {
             if (fmCheckbox.checked) {
                 pdCheckbox.checked = false;
@@ -956,10 +1016,19 @@
                 activeModulationType = 'fm';
                 fmToggle.classList.add('active');
                 statusDiv.textContent = "Frequency Modulation (FM) activated";
+                
+                // Reconnect modulation in real-time if playing
+                if (isPlaying) {
+                    reconnectModulation();
+                }
             } else {
                 fmToggle.classList.remove('active');
                 if (!pdCheckbox.checked) {
                     activeModulationType = null;
+                    // Disconnect modulation if no modulation type selected
+                    if (isPlaying) {
+                        reconnectModulation();
+                    }
                 }
             }
         });
@@ -971,13 +1040,44 @@
                 activeModulationType = 'pd';
                 pdToggle.classList.add('active');
                 statusDiv.textContent = "Phase Modulation (PD) activated";
+                
+                // Reconnect modulation in real-time if playing
+                if (isPlaying) {
+                    reconnectModulation();
+                }
             } else {
                 pdToggle.classList.remove('active');
                 if (!fmCheckbox.checked) {
                     activeModulationType = null;
+                    // Disconnect modulation if no modulation type selected
+                    if (isPlaying) {
+                        reconnectModulation();
+                    }
                 }
             }
         });
+        
+        // Function to reconnect modulation based on current type
+        function reconnectModulation() {
+            if (!isPlaying || modulatorOscillators.length === 0) return;
+            
+            modulatorOscillators.forEach((mod, index) => {
+                // Disconnect old connections
+                mod.oscillator.disconnect();
+                mod.gain.disconnect();
+                
+                // Reconnect based on current modulation type
+                if (activeModulationType === 'fm') {
+                    mod.oscillator.chain(mod.gain, oscillators[index].oscillator.frequency);
+                } else if (activeModulationType === 'pd') {
+                    // For PD, we'll use the same connection as FM (approximation)
+                    mod.oscillator.chain(mod.gain, oscillators[index].oscillator.frequency);
+                }
+                
+                // Reconnect oscillator to destination (through the chain)
+                mod.oscillator.start(); // Ensure it's still running
+            });
+        }
         
         // Download button listener
         downloadBtn.addEventListener('click', downloadWaveform);
@@ -986,21 +1086,38 @@
         attackSlider.addEventListener('input', () => {
             attackValue.textContent = attackSlider.value;
             updateADSRVisualization();
+            
+            // Update ADSR envelope in real-time if playing
+            if (isPlaying && adsrEnvelope) {
+                adsrEnvelope.attack = parseFloat(attackSlider.value);
+            }
         });
         
         decaySlider.addEventListener('input', () => {
             decayValue.textContent = decaySlider.value;
             updateADSRVisualization();
+            
+            if (isPlaying && adsrEnvelope) {
+                adsrEnvelope.decay = parseFloat(decaySlider.value);
+            }
         });
         
         sustainSlider.addEventListener('input', () => {
             sustainValue.textContent = sustainSlider.value;
             updateADSRVisualization();
+            
+            if (isPlaying && adsrEnvelope) {
+                adsrEnvelope.sustain = parseFloat(sustainSlider.value);
+            }
         });
         
         releaseSlider.addEventListener('input', () => {
             releaseValue.textContent = releaseSlider.value;
             updateADSRVisualization();
+            
+            if (isPlaying && adsrEnvelope) {
+                adsrEnvelope.release = parseFloat(releaseSlider.value);
+            }
         });
         
         // UNISON Slider Listeners
@@ -1016,7 +1133,7 @@
             unisonSpreadValue.textContent = unisonSpreadSlider.value;
         });
         
-        // EFFECTS Slider Listeners
+        // EFFECTS Slider Listeners with real-time updates
         reverbSlider.addEventListener('input', () => {
             reverbValue.textContent = reverbSlider.value;
             if (reverbNode) {
@@ -1093,7 +1210,7 @@
             updateFilterConnections();
         });
         
-        // Filter Frequency Slider Listeners
+        // Filter Frequency Slider Listeners with real-time updates
         filterFrequencySlider.addEventListener('input', () => {
             const value = filterFrequencySlider.value;
             filterFrequencyValue.textContent = value;
@@ -1118,7 +1235,7 @@
             const spread = parseFloat(unisonSpreadSlider.value);
             const unisonDetune = parseFloat(unisonDetuneSlider.value);
             
-            const masterGain = new Tone.Gain(1);
+            masterGain = new Tone.Gain(1);
             
             for (let i = 0; i < voices; i++) {
                 const voicePosition = voices === 1 ? 0.5 : i / (voices - 1);
@@ -1142,6 +1259,7 @@
                 const voiceGain = new Tone.Gain(1 / Math.sqrt(Math.max(voices, 1)));
                 const modulatorGain = new Tone.Gain(parseFloat(modulationDepthSlider.value));
                 
+                // Connect modulation based on current type
                 if (activeModulationType === 'fm') {
                     modulator.chain(modulatorGain, carrier.frequency);
                 } else if (activeModulationType === 'pd') {
@@ -1318,7 +1436,7 @@
                 stopVisualization();
                 
                 // Create ADSR envelope
-                const adsrEnvelope = new Tone.AmplitudeEnvelope({
+                adsrEnvelope = new Tone.AmplitudeEnvelope({
                     attack: parseFloat(attackSlider.value),
                     decay: parseFloat(decaySlider.value),
                     sustain: parseFloat(sustainSlider.value),
@@ -1326,7 +1444,7 @@
                 });
                 
                 // Create unison oscillators with modulator
-                const masterGain = createUnisonOscillators(
+                masterGain = createUnisonOscillators(
                     parseFloat(frequencySlider.value)
                 );
                 
@@ -1376,23 +1494,45 @@
         // Function to stop note with ADSR release
         function stopNote() {
             if (oscillators.length > 0 && isPlaying) {
-                // Disconnect and stop oscillators immediately
-                oscillators.forEach(({ oscillator }) => {
-                    oscillator.stop();
-                });
-                modulatorOscillators.forEach(({ oscillator }) => {
-                    oscillator.stop();
-                });
-                
-                oscillators = [];
-                modulatorOscillators = [];
-                isPlaying = false;
-                playBtn.textContent = "Play Note";
-                statusDiv.textContent = "Note stopped";
-                statusDiv.style.background = "#2e7d32";
-                
-                // Stop visualization and freeze waveform
-                stopVisualization();
+                // Use ADSR release if envelope exists
+                if (adsrEnvelope && adsrEnvelope.triggerRelease) {
+                    adsrEnvelope.triggerRelease();
+                    
+                    setTimeout(() => {
+                        oscillators.forEach(({ oscillator }) => {
+                            oscillator.stop();
+                        });
+                        modulatorOscillators.forEach(({ oscillator }) => {
+                            oscillator.stop();
+                        });
+                        oscillators = [];
+                        modulatorOscillators = [];
+                        isPlaying = false;
+                        playBtn.textContent = "Play Note";
+                        statusDiv.textContent = "Note stopped";
+                        statusDiv.style.background = "#2e7d32";
+                        
+                        // Stop visualization and freeze waveform
+                        stopVisualization();
+                    }, parseFloat(releaseSlider.value) * 1000 + 100);
+                } else {
+                    // Immediate stop
+                    oscillators.forEach(({ oscillator }) => {
+                        oscillator.stop();
+                    });
+                    modulatorOscillators.forEach(({ oscillator }) => {
+                        oscillator.stop();
+                    });
+                    oscillators = [];
+                    modulatorOscillators = [];
+                    isPlaying = false;
+                    playBtn.textContent = "Play Note";
+                    statusDiv.textContent = "Note stopped";
+                    statusDiv.style.background = "#2e7d32";
+                    
+                    // Stop visualization and freeze waveform
+                    stopVisualization();
+                }
             }
         }
         
@@ -1475,7 +1615,7 @@
         drawWaveform([], false);
         
         // Log initialization
-        console.log("FM/PD Synthesizer with waveform visualizer initialized");
+        console.log("FM/PD Synthesizer with real-time updates initialized");
     </script>
 </body>
 </html>
