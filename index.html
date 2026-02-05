@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tone.js Synth with Real-time Updates</title>
+    <title>Tone.js Synth with Real-time FM/PD Switching</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
         body {
@@ -330,7 +330,7 @@
 </head>
 <body>
     <div class="synth-container">
-        <h1>Tone.js Synth with Real-time Modulation</h1>
+        <h1>Tone.js Synth with Real-time FM/PD Switching</h1>
         
         <!-- MOVED TO TOP: Audio Controls and Waveform Visualizer -->
         <div class="top-controls">
@@ -683,6 +683,42 @@
         const delayFeedbackSlider = document.getElementById('delayFeedback');
         const delayFeedbackValue = document.getElementById('delayFeedbackValue');
         
+        // Function to switch between FM and PD modulation in real-time
+        function switchModulationType(newType) {
+            if (!isPlaying || modulatorOscillators.length === 0) return;
+            
+            activeModulationType = newType;
+            
+            // Disconnect all modulation connections
+            modulatorOscillators.forEach((mod, index) => {
+                // Disconnect the modulator from carrier
+                mod.oscillator.disconnect();
+                mod.gain.disconnect();
+                
+                // Reconnect based on new modulation type
+                if (newType === 'fm') {
+                    // FM: modulator → gain → carrier frequency
+                    mod.oscillator.connect(mod.gain);
+                    mod.gain.connect(oscillators[index].oscillator.frequency);
+                } else if (newType === 'pd') {
+                    // PD: modulator → gain → carrier frequency (simulated PD)
+                    // Note: True phase modulation would require different approach
+                    mod.oscillator.connect(mod.gain);
+                    mod.gain.connect(oscillators[index].oscillator.frequency);
+                    
+                    // For PD simulation, we can adjust the modulation curve
+                    // by changing the modulation depth scaling
+                    mod.gain.gain.value = parseFloat(modulationDepthSlider.value) * 0.1;
+                }
+                
+                // Ensure modulator is still connected to output (through its own gain)
+                mod.oscillator.start(); // Keep it running
+            });
+            
+            console.log(`Switched to ${newType.toUpperCase()} modulation`);
+            statusDiv.textContent = `Switched to ${newType.toUpperCase()} modulation`;
+        }
+        
         // Function to update modulator parameters in real-time
         function updateModulatorParameters() {
             if (!isPlaying || modulatorOscillators.length === 0) return;
@@ -700,8 +736,13 @@
                 // Update waveform type
                 mod.oscillator.type = waveform;
                 
-                // Update modulation depth
-                mod.gain.gain.value = depth;
+                // Update modulation depth with different scaling for PD
+                if (activeModulationType === 'pd') {
+                    // PD typically uses smaller depth values for similar effect
+                    mod.gain.gain.value = depth * 0.1;
+                } else {
+                    mod.gain.gain.value = depth;
+                }
             });
         }
         
@@ -980,11 +1021,7 @@
             modulationDepthValue.textContent = modulationDepthSlider.value;
             
             // Update modulation depth in real-time
-            if (isPlaying) {
-                modulatorOscillators.forEach(({ gain }) => {
-                    gain.gain.value = parseFloat(modulationDepthSlider.value);
-                });
-            }
+            updateModulatorParameters();
         });
         
         // Waveform change handlers with real-time updates
@@ -1008,76 +1045,46 @@
             }
         });
         
-        // FM/PD Toggle Listeners with real-time updates
+        // FM/PD Toggle Listeners with proper switching
         fmCheckbox.addEventListener('change', () => {
             if (fmCheckbox.checked) {
+                // Uncheck PD
                 pdCheckbox.checked = false;
                 pdToggle.classList.remove('active');
+                
+                // Activate FM
                 activeModulationType = 'fm';
                 fmToggle.classList.add('active');
-                statusDiv.textContent = "Frequency Modulation (FM) activated";
                 
-                // Reconnect modulation in real-time if playing
-                if (isPlaying) {
-                    reconnectModulation();
-                }
+                // Switch modulation type in real-time
+                switchModulationType('fm');
             } else {
                 fmToggle.classList.remove('active');
                 if (!pdCheckbox.checked) {
                     activeModulationType = null;
-                    // Disconnect modulation if no modulation type selected
-                    if (isPlaying) {
-                        reconnectModulation();
-                    }
                 }
             }
         });
         
         pdCheckbox.addEventListener('change', () => {
             if (pdCheckbox.checked) {
+                // Uncheck FM
                 fmCheckbox.checked = false;
                 fmToggle.classList.remove('active');
+                
+                // Activate PD
                 activeModulationType = 'pd';
                 pdToggle.classList.add('active');
-                statusDiv.textContent = "Phase Modulation (PD) activated";
                 
-                // Reconnect modulation in real-time if playing
-                if (isPlaying) {
-                    reconnectModulation();
-                }
+                // Switch modulation type in real-time
+                switchModulationType('pd');
             } else {
                 pdToggle.classList.remove('active');
                 if (!fmCheckbox.checked) {
                     activeModulationType = null;
-                    // Disconnect modulation if no modulation type selected
-                    if (isPlaying) {
-                        reconnectModulation();
-                    }
                 }
             }
         });
-        
-        // Function to reconnect modulation based on current type
-        function reconnectModulation() {
-            if (!isPlaying || modulatorOscillators.length === 0) return;
-            
-            modulatorOscillators.forEach((mod, index) => {
-                // Disconnect old connections
-                mod.oscillator.disconnect();
-                mod.gain.disconnect();
-                
-                // Reconnect based on current modulation type
-                if (activeModulationType === 'fm') {
-                    mod.oscillator.chain(mod.gain, oscillators[index].oscillator.frequency);
-                } else if (activeModulationType === 'pd') {
-                    // For PD, we'll use the same connection as FM (approximation)
-                    mod.oscillator.chain(mod.gain, oscillators[index].oscillator.frequency);
-                }
-                
-                // Reconnect oscillator to destination (through the chain)
-                mod.oscillator.start(); // Ensure it's still running
-            });
-        }
         
         // Download button listener
         downloadBtn.addEventListener('click', downloadWaveform);
@@ -1264,6 +1271,8 @@
                     modulator.chain(modulatorGain, carrier.frequency);
                 } else if (activeModulationType === 'pd') {
                     modulator.chain(modulatorGain, carrier.frequency);
+                    // Adjust gain for PD
+                    modulatorGain.gain.value = parseFloat(modulationDepthSlider.value) * 0.1;
                 }
                 
                 carrier.connect(voiceGain);
@@ -1370,6 +1379,7 @@
                 createAudioNodes();
                 updateADSRVisualization();
                 
+                // Set FM as default
                 activeModulationType = 'fm';
                 fmToggle.classList.add('active');
                 
@@ -1478,10 +1488,7 @@
                 
                 isPlaying = true;
                 playBtn.textContent = "Stop Note";
-                statusDiv.textContent = `Playing ${oscillators.length}-voice unison`;
-                if (activeModulationType) {
-                    statusDiv.textContent += ` with ${activeModulationType.toUpperCase()} modulation`;
-                }
+                statusDiv.textContent = `Playing ${oscillators.length}-voice unison with ${activeModulationType.toUpperCase()}`;
                 statusDiv.style.background = "#1565c0";
                 
             } catch (error) {
@@ -1615,7 +1622,7 @@
         drawWaveform([], false);
         
         // Log initialization
-        console.log("FM/PD Synthesizer with real-time updates initialized");
+        console.log("FM/PD Synthesizer with real-time switching initialized");
     </script>
 </body>
 </html>
